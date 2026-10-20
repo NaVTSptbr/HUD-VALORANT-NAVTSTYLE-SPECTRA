@@ -95,11 +95,12 @@ Também dá para hospedar como site estático (GitHub Pages, Netlify) ou abrir o
 
 ## Fontes
 
-A HUD foi feita com **Foundry Gridnik** e **Tungsten**, que são pagas e não vêm neste repositório. Se você tiver a licença, coloque em `Resources/` com os nomes `FoundryGridnik-Regular.otf`, `FoundryGridnik-Bold.otf`, `FoundryGridnik-ExtraBold.otf` e `Tungsten-Bold.ttf` (no Docker, monte os arquivos como mostrado em `docker-compose.yml`). Sem elas, a HUD usa uma fonte reserva do sistema.
+A HUD usa **Foundry Gridnik** (Regular, Bold e ExtraBold) e **Tungsten** (Bold), que já vêm em `Resources/`. As licenças das fontes ficam em `licencas/`.
 
 ## Créditos e licenças
 
 - Código desta HUD: MIT (`LICENSE`).
+- Fontes Foundry Gridnik e Tungsten: licenciadas pelo autor do projeto; os termos ficam em `licencas/` e o MIT não se aplica a elas.
 - Ícones de função em `Resources/Funcoes/`: [Spectra-Frontend-VAL26](https://github.com/nobiiVAL/Spectra-Frontend-VAL26) (nobii / Purple Shark UG), Elastic License 2.0, texto em `licencas/`.
 - Spectra é um projeto de terceiros, e o uso dos servidores dele segue as regras do Spectra.
 

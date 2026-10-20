@@ -7,9 +7,4 @@ services:
       - "3000:80"
     volumes:
       - ./config:/usr/share/nginx/html/config
-      # fontes próprias (opcional): coloque os arquivos em ./fontes e descomente
-      # - ./fontes/FoundryGridnik-Regular.otf:/usr/share/nginx/html/Resources/FoundryGridnik-Regular.otf
-      # - ./fontes/FoundryGridnik-Bold.otf:/usr/share/nginx/html/Resources/FoundryGridnik-Bold.otf
-      # - ./fontes/FoundryGridnik-ExtraBold.otf:/usr/share/nginx/html/Resources/FoundryGridnik-ExtraBold.otf
-      # - ./fontes/Tungsten-Bold.ttf:/usr/share/nginx/html/Resources/Tungsten-Bold.ttf
     restart: unless-stopped

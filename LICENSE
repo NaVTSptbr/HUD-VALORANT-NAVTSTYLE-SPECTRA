@@ -12,7 +12,8 @@ furnished to do so, subject to the following conditions:
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 
-The MIT license above applies to the code of this project only. Files under
+The MIT license above applies to the code of this project only. Font files in Resources/ (Foundry Gridnik, Tungsten) are licensed
+separately (see licencas/). Files under
 Resources/Funcoes are licensed under the Elastic License 2.0 (see
 licencas/ELv2-Spectra-Frontend-VAL26.md), and Riot Games assets remain the
 property of Riot Games, Inc.
