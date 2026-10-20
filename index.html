@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HUD Valorant</title>
+<script>
+  // Com ?groupCode= no link, vai direto para a HUD (mantendo todos os parâmetros)
+  if (new URLSearchParams(location.search).get("groupCode")) location.replace("vctcn.html" + location.search + location.hash);
+</script>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0f1520; color: #e8edf1; font: 16px/1.4 "Segoe UI", system-ui, sans-serif; }
+  main { width: min(520px, calc(100% - 32px)); background: #161e2b; border: 1px solid #263244; border-radius: 10px; padding: 28px; }
+  h1 { margin: 0 0 6px; font-size: 22px; }
+  p { margin: 0 0 18px; color: #9fb0c0; font-size: 14px; }
+  label { display: block; font-size: 13px; color: #9fb0c0; margin: 14px 0 6px; }
+  input { width: 100%; box-sizing: border-box; padding: 11px 12px; border-radius: 6px; border: 1px solid #2f3d52; background: #0f1520; color: #fff; font-size: 17px; letter-spacing: 1px; }
+  ul { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 8px; }
+  li { background: #0f1520; border: 1px solid #263244; border-radius: 6px; padding: 10px 12px; }
+  li b { display: block; font-size: 13px; color: #9fb0c0; font-weight: 600; margin-bottom: 4px; }
+  li a { color: #8fd3ff; font-size: 13px; word-break: break-all; }
+</style>
+</head>
+<body>
+<main>
+  <h1>HUD de Valorant para o Spectra</h1>
+  <p>Preencha os códigos e copie os links para fontes de navegador 1920×1080 no OBS.</p>
+  <label for="c">Código da partida (Spectra Client)</label>
+  <input id="c" autocomplete="off" placeholder="ABC123">
+  <label for="s">Código da sessão de veto (opcional)</label>
+  <input id="s" autocomplete="off" placeholder="sessão do veto">
+  <ul id="l"></ul>
+</main>
+<script>
+  const c = document.getElementById("c"), s = document.getElementById("s"), l = document.getElementById("l");
+  const base = location.origin + location.pathname.replace(/index\.html$/, "");
+  const draw = () => {
+    const code = encodeURIComponent(c.value.trim().toUpperCase() || "CODIGO"), ses = encodeURIComponent(s.value.trim() || "SESSAO");
+    const links = [["HUD in-game + seleção de agentes", `vctcn.html?groupCode=${code}`], ["Veto de mapas", `mapban.html?sessionId=${ses}`],
+      ["Resumo dos jogadores", `breakdown.html?tipo=times&groupCode=${code}`], ["Resumo do mapa", `breakdown.html?tipo=mapa&groupCode=${code}`]];
+    l.innerHTML = links.map(([t, u]) => `<li><b>${t}</b><a href="${base + u}" target="_blank">${base + u}</a></li>`).join("");
+  };
+  c.addEventListener("input", draw); s.addEventListener("input", draw); draw(); c.focus();
+</script>
+</body>
+</html>

@@ -1,0 +1,2 @@
+Os ícones desta pasta foram copiados sem alteração do Spectra-Frontend-VAL26 (nobii / Purple Shark UG), arquivos public/assets/roles/*.webp, e renomeados para português.
+Licença: Elastic License 2.0, ver ../../licencas/ELv2-Spectra-Frontend-VAL26.md

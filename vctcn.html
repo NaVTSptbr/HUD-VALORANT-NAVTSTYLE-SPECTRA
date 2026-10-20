@@ -1,0 +1,1589 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HUD VCT CN</title>
+<script src="config.js"></script>
+<script src="socket.io.min.js"></script>
+<script>window.io || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"><\/script>');</script>
+<style>
+/* =====================================================================
+   HUD VCT CN — overlay 1920×1080 para OBS (Spectra Server: logon + match_data)
+   Todas as medidas abaixo estão em pixels do palco 1920×1080, tiradas dos
+   frames do vídeo de referência. O palco inteiro é escalado junto (--s),
+   então 1600×900 e 2560×1440 mantêm as mesmas proporções.
+   ===================================================================== */
+:root {
+  /* No VCT CN a cor segue o LADO: defesa = verde-petróleo, ataque = carmim.
+     As variáveis --l-* / --r-* (time da esquerda / direita) apontam para a paleta do lado de cada time. */
+  --def-main: #3a2271; --def-plate: #361f8a; --def-plate2: #341261; --def-hi: #6238d6; --def-hp: #6114f0; --def-text: #6a45d1;
+  --def-band: #210f4a; --def-band2: rgba(33, 14, 64, 0.95); --def-band3: rgba(6, 20, 22, 0.92); --def-cell: #4a2d78;
+  --att-main: #8f3c23; --att-plate: #a5371b; --att-plate2: #6d2c12; --att-hi: #e05924; --att-hp: #f04410; --att-text: #e87040;
+  --att-band: #4a1f12; --att-band2: rgba(66, 36, 18, 0.95); --att-band3: rgba(24, 10, 15, 0.92); --att-cell: #733d27;
+  /* neutros */
+  --ink: #f4f7f8;
+  --ink-2: #c9d0d6;
+  --mute: #8a939c;
+  --spent: #5f7894;
+  --navy: #0a1018;
+  --navy-2: #101721;
+  --panel: rgba(10, 16, 22, 0.8);
+  --panel-dead: rgba(28, 32, 37, 0.84);
+  --row: rgba(14, 21, 29, 0.93);
+  --rule: #24303c;
+  --brand-a: #4826c3;
+  --brand-b: #1c060b;
+  /* fontes: a pasta Resources traz Foundry Gridnik e Tungsten; os outros nomes são reserva */
+  --f-num: "HUDGridnik", "Segoe UI", "Chakra Petch", "Rajdhani", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  --f-cond: "HUDTungsten", "Oswald", "Bebas Neue", "Arial Narrow", sans-serif;
+  --f-cjk: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Noto Sans SC", "HUDGridnik", sans-serif;
+  /* tempos */
+  --t-fast: 140ms;
+  --t-mid: 200ms;
+  --t-hp: 180ms;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+body { font-family: var(--f-num); color: var(--ink); -webkit-font-smoothing: antialiased; }
+body.page { background: #0b0f14; }
+img { display: block; }
+
+.viewport { position: fixed; inset: 0; }
+.stage {
+  --l-main: var(--def-main); --l-plate: var(--def-plate); --l-plate2: var(--def-plate2); --l-hi: var(--def-hi); --l-hp: var(--def-hp); --l-text: var(--def-text); --l-band: var(--def-band); --l-band2: var(--def-band2); --l-band3: var(--def-band3);
+  --r-main: var(--att-main); --r-plate: var(--att-plate); --r-plate2: var(--att-plate2); --r-hi: var(--att-hi); --r-hp: var(--att-hp); --r-text: var(--att-text); --r-band: var(--att-band); --r-band2: var(--att-band2); --r-band3: var(--att-band3);
+}
+.stage.l-att {
+  --l-main: var(--att-main); --l-plate: var(--att-plate); --l-plate2: var(--att-plate2); --l-hi: var(--att-hi); --l-hp: var(--att-hp); --l-text: var(--att-text); --l-band: var(--att-band); --l-band2: var(--att-band2); --l-band3: var(--att-band3);
+  --r-main: var(--def-main); --r-plate: var(--def-plate); --r-plate2: var(--def-plate2); --r-hi: var(--def-hi); --r-hp: var(--def-hp); --r-text: var(--def-text); --r-band: var(--def-band); --r-band2: var(--def-band2); --r-band3: var(--def-band3);
+}
+.stage { position: absolute; width: 1920px; height: 1080px; transform: scale(var(--s, 1)); transform-origin: 0 0; overflow: hidden; }
+.stage.bg-ref { background-size: 1920px 1080px; }
+.abs { position: absolute; }
+.hidden { display: none !important; }
+
+/* ---------- Faixa informativa (y 0–34) ---------- */
+.info-band { left: 0; top: 0; width: 1920px; height: 34px; background: linear-gradient(180deg, rgba(0, 0, 0, 0.97), rgba(2, 4, 6, 0.92)); }
+.info { top: 0; height: 34px; display: flex; align-items: center; font: 800 16px/1 var(--f-num); color: var(--ink); white-space: nowrap; letter-spacing: 0.2px; }
+.info.l { left: 10px; gap: 0; }
+.info .it { display: flex; align-items: center; gap: 8px; }
+.info .it:nth-child(1) { width: 197px; }
+.info .it:nth-child(2) { width: 200px; }
+.info .it img { width: 18px; height: 14px; object-fit: contain; filter: brightness(0) invert(0.85); }
+.info.r { left: 1365px; width: 232px; justify-content: center; }
+
+/* ---------- Bloco do evento (canto superior direito) ---------- */
+.brand { left: 1627px; top: 0; width: 293px; height: 90px; clip-path: polygon(0 0, 100% 0, 100% 100%, 15px 100%, 0 75px); background: linear-gradient(160deg, var(--brand-a) 0%, #38147a 38%, var(--brand-b) 100%); box-shadow: inset 2px 0 0 rgba(0, 0, 0, 0.55); display: grid; place-items: center; overflow: hidden; }
+.brand img { position: absolute; left: 50%; top: 50%; max-width: 190px; max-height: 70px; transform: translate(-50%, -50%); transition: opacity 400ms ease; }
+
+/* ---------- Placar ---------- */
+.bug { left: 0; top: 0; width: 1920px; height: 90px; pointer-events: none; }
+.bug svg { position: absolute; left: 0; top: 0; }
+.bug .logo { position: absolute; top: 8px; width: 46px; height: 44px; object-fit: contain; }
+.bug .logo.l { left: 633px; }
+.bug .logo.r { left: 1242px; }
+.bug .tn { position: absolute; top: 9px; width: 88px; height: 38px; display: flex; align-items: center; justify-content: center; font: 400 37px/1 var(--f-cond); letter-spacing: 0.6px; color: var(--ink); white-space: nowrap; text-transform: uppercase; }
+.bug .tn.l { left: 682px; }
+.bug .tn.r { left: 1150px; }
+.bug .sc { position: absolute; top: 3px; width: 60px; height: 44px; display: flex; align-items: center; justify-content: center; font: 800 44px/1 var(--f-num); color: #fff; }
+.bug .sc.l { left: 778px; }
+.bug .sc.r { left: 1082px; }
+.bug .sc.bump { animation: bump 420ms ease-out; }
+@keyframes bump { 0% { transform: scale(1.18); } 100% { transform: scale(1); } }
+.bug .rnd { position: absolute; left: 900px; width: 120px; top: 5px; text-align: center; font: 700 12px/1 var(--f-num); color: var(--mute); letter-spacing: 0.5px; }
+.bug .time { position: absolute; left: 880px; width: 160px; transform-origin: 50% 50%; white-space: nowrap; top: 24px; text-align: center; font: 400 48px/1 var(--f-cond); color: #fff; letter-spacing: 0.5px; transition: opacity var(--t-fast); }
+.bug .spk { position: absolute; left: 932px; top: 21px; width: 56px; height: 48px; opacity: 0; transition: opacity var(--t-mid); }
+.bug .spk i { position: absolute; inset: 0; background: var(--att-hi); -webkit-mask: var(--spike-mask) center / contain no-repeat; mask: var(--spike-mask) center / contain no-repeat; }
+.bug .spk svg { width: 100%; height: 100%; color: var(--att-hi); }
+.bug.planted .time { opacity: 0; }
+.bug.planted .spk { opacity: 1; }
+.bug.paused .time { font-size: 30px; top: 34px; }
+.bug .seed { position: absolute; top: 48px; width: 120px; font: 700 11px/1 var(--f-num); letter-spacing: 1px; color: rgba(255,255,255,.8); white-space: nowrap; }
+.bug .seed.l { left: 640px; text-align: left; }
+.bug .seed.r { left: 1160px; text-align: right; }
+.acc { position: relative; display: inline-block; }
+.acc::before { content: ""; position: absolute; left: 50%; background: currentColor; }
+.acc.ac::before { width: .24em; height: .085em; top: -.2em; transform: translateX(-30%) rotate(-30deg); }
+.acc.gr::before { width: .24em; height: .085em; top: -.2em; transform: translateX(-70%) rotate(30deg); }
+.acc.ci::before { width: .2em; height: .2em; top: -.2em; background: none; border-left: .085em solid currentColor; border-top: .085em solid currentColor; transform: translateX(-50%) rotate(45deg); }
+.acc.ti::before { width: .34em; height: .14em; top: -.24em; transform: translateX(-50%); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 12'%3E%3Cpath d='M2 9C5 3 9 3 13 6s8 3 11-3' fill='none' stroke='%23000' stroke-width='3.6' stroke-linecap='round'/%3E%3C/svg%3E") center / 100% 100% no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 12'%3E%3Cpath d='M2 9C5 3 9 3 13 6s8 3 11-3' fill='none' stroke='%23000' stroke-width='3.6' stroke-linecap='round'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
+.acc.ce::before { width: .1em; height: .2em; top: auto; bottom: -.18em; transform: translateX(-50%) skewX(-15deg); }
+.acc.lw::before { margin-top: .26em; }
+.pause { left: 566px; top: 215px; width: 788px; height: 178px; --pz-c: #6b7680; --pz-h: #c9d0d6; opacity: 0; transform: translateY(40px); transition: opacity 300ms ease, transform 300ms cubic-bezier(.2,.8,.2,1); pointer-events: none; }
+.pause.on { opacity: 1; transform: none; }
+.pause.t-l { --pz-c: var(--l-main); --pz-h: var(--l-hi); }
+.pause.t-r { --pz-c: var(--r-main); --pz-h: var(--r-hi); }
+.pause svg { position: absolute; inset: 0; }
+.pause .wm { position: absolute; left: 87px; width: 614px; top: 6px; text-align: center; font: 400 150px/1 var(--f-cond); letter-spacing: 6px; color: rgba(255,255,255,.06); text-transform: uppercase; white-space: nowrap; overflow: hidden; }
+.pause .pt { position: absolute; left: 87px; width: 614px; top: 44px; text-align: center; font: 800 46px/1 var(--f-num); color: #fff; text-transform: uppercase; white-space: nowrap; letter-spacing: .5px; }
+.pause .pt span { display: inline-block; }
+.pause .pl { position: absolute; left: 87px; width: 614px; top: 104px; display: flex; justify-content: center; align-items: center; gap: 22px; font: 800 26px/1 var(--f-num); color: rgba(255,255,255,.92); text-transform: uppercase; }
+.pause .pl img { height: 34px; max-width: 70px; object-fit: contain; }
+.pause .pl #pz-side { color: var(--pz-h); }
+.pause.tech .pl { display: none; }
+.pause.tech .pt { top: 66px; }
+.pause .pb { position: absolute; left: 230px; width: 328px; top: 150px; height: 5px; background: rgba(255,255,255,.14); }
+.pause .pb i { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: var(--pz-h); transition: width 1s linear; }
+.pause .ps { position: absolute; left: 568px; top: 143px; font: 700 18px/1 var(--f-num); color: rgba(255,255,255,.85); }
+.pause.notimer .pb, .pause.notimer .ps { display: none; }
+.rwin { left: 649px; top: 190px; width: 914px; height: 338px; transform: scale(.68); transform-origin: 0 0; opacity: 0; clip-path: inset(0 50% 0 50%); transition: clip-path 380ms cubic-bezier(.6,0,.8,.4), opacity 0s linear 380ms; pointer-events: none; }
+.rwin.on { opacity: 1; clip-path: inset(0 0 0 0); transition: clip-path 480ms cubic-bezier(.2,.8,.2,1), opacity 0s; }
+.rwin img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.rwin .rr, .rwin .rt { position: absolute; left: 0; width: 942px; text-align: center; white-space: nowrap; font: 800 35px/1 var(--f-num); letter-spacing: .5px; text-transform: uppercase; }
+.rwin .rr { top: 17px; color: #fff; }
+.rwin .rt { top: 80px; color: #5e00c5; }
+.rwin .rt span { display: inline-block; transform-origin: 50% 50%; }
+.toast { left: 510px; top: 104px; width: 900px; height: 104px; display: flex; align-items: center; gap: 26px; padding: 0 34px; background: rgba(6, 12, 18, 0.92); border-left: 4px solid var(--l-hi); border-right: 4px solid var(--r-hi); opacity: 0; transform: translateY(-10px); transition: opacity var(--t-mid), transform var(--t-mid); pointer-events: none; }
+.toast.on { opacity: 1; transform: none; }
+.toast.t-l { border-right-color: var(--l-hi); }
+.toast.t-r { border-left-color: var(--r-hi); }
+.toast img { width: 76px; height: 64px; object-fit: contain; flex: none; }
+.toast img[hidden] { display: none; }
+.toast .tx { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.toast b { font: 800 26px/1 var(--f-num); color: #fff; text-transform: uppercase; letter-spacing: .5px; }
+.toast span { font: 400 19px/1.25 var(--f-num); color: #dfe6ea; }
+.toast b:empty { display: none; }
+.stage.lobby .combat, .stage.lobby .buy { display: none; }
+/* antes da partida (seleção de agentes / carregando) a HUD não cobre o topo do jogo: só a faixa da seleção pode aparecer */
+.stage.lobby > .abs:not(.asel):not(.dbg) { opacity: 0 !important; }
+.dbg { left: 12px; top: 40px; padding: 6px 10px; background: rgba(0, 0, 0, 0.82); font: 700 14px/1.2 var(--f-num); color: #9ff59f; white-space: nowrap; z-index: 50; }
+.pip { fill: rgba(10, 16, 24, 0.55); stroke: #f2f5f7; stroke-width: 1.4; }
+.pip.won.l { fill: var(--l-hi); stroke: var(--l-hi); }
+.pip.won.r { fill: var(--r-hi); stroke: var(--r-hi); }
+
+/* ---------- Cartões dos jogadores (combate) ---------- */
+.cards { top: 575px; width: 291px; }
+.cards.l { left: 16px; }
+.cards.r { left: 1613px; }
+.pc { position: absolute; left: 0; width: 291px; height: 88px; transition: opacity var(--t-mid), transform var(--t-mid); }
+.pc .bgt { position: absolute; top: 9px; height: 47px; background: var(--panel); }
+.cards.l .pc .bgt { left: 69px; width: 222px; clip-path: polygon(0 0, 211px 0, 100% 11px, 100% 100%, 0 100%); }
+.cards.r .pc .bgt { left: 0; width: 222px; clip-path: polygon(11px 0, 100% 0, 100% 100%, 0 100%, 0 11px); }
+.pc .face { position: absolute; top: 0; width: 69px; height: 56px; background: #05070a; overflow: hidden; }
+.cards.l .pc .face { left: 0; clip-path: polygon(0 0, 62px 0, 100% 7px, 100% 100%, 0 100%); }
+.cards.r .pc .face { right: 0; clip-path: polygon(0 7px, 7px 0, 100% 0, 100% 100%, 0 100%); }
+.pc .face img { position: absolute; left: 50%; top: 0; height: 100%; width: auto; transform: translateX(-50%); }
+.pc .face .ph { position: absolute; inset: 0; display: grid; place-items: center; font: 700 11px var(--f-num); color: var(--mute); }
+.pc .band { position: absolute; top: 56px; left: 0; width: 291px; height: 32px; }
+.cards.l .pc .band { clip-path: polygon(0 0, 100% 0, 100% 100%, 32px 100%, 0 0); background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 3px), linear-gradient(90deg, var(--l-band) 0%, var(--l-band2) 40%, var(--l-band3) 100%); }
+.cards.r .pc .band { clip-path: polygon(0 0, 100% 0, calc(100% - 32px) 100%, 0 100%); background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 3px), linear-gradient(270deg, var(--r-band) 0%, var(--r-band2) 40%, var(--r-band3) 100%); }
+.pc .name { position: absolute; top: 15px; max-width: 120px; font: 700 14px/1 var(--f-num); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cards.l .pc .name { left: 81px; }
+.cards.r .pc .name { right: 81px; text-align: right; }
+.pc .kda { white-space: nowrap; position: absolute; top: 15px; font: 700 15px/1 var(--f-num); color: var(--ink); letter-spacing: 0.4px; }
+.cards.l .pc .kda { right: 14px; }
+.cards.r .pc .kda { left: 14px; }
+.pc .kda .cv { display: inline-block; height: 13px; width: 13px; margin-right: 4px; vertical-align: -1px; }
+.pc .shd { position: absolute; top: 33px; width: 18px; height: 21px; }
+.pc .shd svg { width: 100%; height: 100%; }
+.pc .shd b { position: absolute; inset: 0; display: grid; place-items: center; padding-bottom: 2px; font: 700 9px/1 var(--f-num); color: #fff; }
+.cards.l .pc .shd { left: 80px; }
+.cards.r .pc .shd { right: 80px; }
+.pc .hpn { position: absolute; top: 35px; width: 34px; font: 800 17px/1 var(--f-num); color: #fff; }
+.cards.l .pc .hpn { left: 101px; }
+.cards.r .pc .hpn { right: 101px; text-align: right; }
+.pc .hpb { position: absolute; top: 41px; width: 150px; height: 6px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.cards.l .pc .hpb { left: 135px; }
+.cards.r .pc .hpb { right: 135px; }
+.pc .hpb i { position: absolute; inset: 0; transition: transform var(--t-hp) ease-out; }
+.cards.l .pc .hpb i { background: var(--l-hp); transform-origin: 0 50%; }
+.cards.r .pc .hpb i { background: var(--r-hp); transform-origin: 100% 50%; }
+.pc .ult { position: absolute; top: 51px; width: 38px; height: 38px; }
+.cards.l .pc .ult { left: 37px; }
+.cards.r .pc .ult { right: 37px; }
+.pc .abs3 { position: absolute; top: 62px; display: flex; gap: 0; }
+.cards.l .pc .abs3 { left: 72px; }
+.cards.r .pc .abs3 { right: 72px; flex-direction: row-reverse; }
+.ab { width: 38px; height: 26px; position: relative; display: flex; flex-direction: column; align-items: center; }
+.ab img { width: 17px; height: 17px; object-fit: contain; filter: brightness(0) invert(1); }
+.ab .lt { width: 17px; height: 17px; display: grid; place-items: center; font: 700 11px var(--f-num); color: #fff; }
+.ab .dots { display: flex; gap: 4px; margin-top: 3px; height: 4px; }
+.ab .dots i { width: 4px; height: 4px; border-radius: 50%; background: #fff; }
+.ab.empty img, .ab.empty .lt { opacity: 0.32; }
+.pc .wp { position: absolute; top: 62px; width: 60px; height: 18px; display: flex; align-items: center; }
+.cards.l .pc .wp { left: 188px; justify-content: center; }
+.cards.r .pc .wp { right: 188px; justify-content: center; }
+.wpi { max-width: 100%; max-height: 100%; object-fit: contain; filter: brightness(0) invert(1); }
+.flip .wpi, .flip.wpi { transform: scaleX(-1); }
+.wtx { font: 700 11px var(--f-num); color: #fff; text-transform: uppercase; }
+.pc .eye { position: absolute; top: 4px; width: 18px; height: 18px; color: #fff; opacity: 0; transition: opacity var(--t-fast); }
+.cards.l .pc .eye { left: 286px; }
+.cards.r .pc .eye { left: -14px; }
+.pc.obs .eye { opacity: 1; }
+.pc .spikec { position: absolute; top: 58px; width: 27px; height: 27px; border-radius: 50%; background: #0c1116; border: 1.5px solid rgba(255, 255, 255, 0.35); display: none; }
+.pc .spikec i { position: absolute; inset: 5px; background: #fff; -webkit-mask: var(--spike-mask) center / contain no-repeat; mask: var(--spike-mask) center / contain no-repeat; }
+.pc .spikec svg { position: absolute; inset: 4px; width: calc(100% - 8px); height: calc(100% - 8px); color: #fff; }
+.cards.l .pc .spikec { left: 0; }
+.cards.r .pc .spikec { right: 0; }
+.pc.spike .spikec { display: block; }
+/* morto: cartão curto, cinza, com K/D/A e créditos */
+.pc .dinf { position: absolute; top: 9px; height: 79px; width: 127px; display: none; background: var(--panel-dead); }
+.cards.l .pc .dinf { left: 69px; clip-path: polygon(0 0, 116px 0, 100% 11px, 100% 100%, 0 100%); }
+.cards.r .pc .dinf { right: 69px; clip-path: polygon(11px 0, 100% 0, 100% 100%, 0 100%, 0 11px); }
+.pc .dinf .dn { position: absolute; top: 7px; font: 700 14px/1 var(--f-num); max-width: 104px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc .dinf .dk { position: absolute; top: 30px; font: 700 15px/1 var(--f-num); }
+.pc .dinf .dc { position: absolute; top: 54px; display: flex; align-items: center; gap: 0; font: 700 14px/1 var(--f-num); }
+.pc .dinf .dc .cv { width: 13px; height: 13px; }
+.pc .dinf .dc span { width: 48px; text-align: center; }
+.cards.l .pc .dinf .dn, .cards.l .pc .dinf .dk, .cards.l .pc .dinf .dc { left: 12px; }
+.cards.r .pc .dinf .dn, .cards.r .pc .dinf .dk, .cards.r .pc .dinf .dc { right: 12px; }
+.cards.r .pc .dinf .dc { flex-direction: row-reverse; }
+.pc .dbase { position: absolute; top: 56px; width: 69px; height: 32px; background: var(--panel-dead); display: none; }
+.cards.l .pc .dbase { left: 0; clip-path: polygon(0 0, 100% 0, 100% 100%, 32px 100%); }
+.cards.r .pc .dbase { right: 0; clip-path: polygon(0 0, 100% 0, calc(100% - 32px) 100%, 0 100%); }
+.pc.dead .bgt, .pc.dead .band, .pc.dead .name, .pc.dead .kda, .pc.dead .shd, .pc.dead .hpn, .pc.dead .hpb, .pc.dead .abs3, .pc.dead .wp { display: none; }
+.pc.dead .dinf, .pc.dead .dbase { display: block; }
+.pc.dead .face { background: #15191d; }
+.pc.dead .face img { filter: grayscale(1) brightness(0.8); }
+
+/* jogador observado: contorno dourado com brilho (vale no 5x5 e no 1x1) */
+.pc .obsg { position: absolute; top: 9px; height: 47px; width: 222px; opacity: 0; transition: opacity var(--t-fast); pointer-events: none; }
+.cards.l .pc .obsg { left: 69px; background: linear-gradient(90deg, rgba(182, 159, 88, 0) 0%, rgba(182, 159, 88, 0.1) 55%, rgba(182, 159, 88, 0.38) 100%); clip-path: polygon(0 0, 211px 0, 100% 11px, 100% 100%, 0 100%); }
+.cards.r .pc .obsg { left: 0; background: linear-gradient(270deg, rgba(182, 159, 88, 0) 0%, rgba(182, 159, 88, 0.1) 55%, rgba(182, 159, 88, 0.38) 100%); clip-path: polygon(11px 0, 100% 0, 100% 100%, 0 100%, 0 11px); }
+.pc.obs .obsg { opacity: 1; }
+.pc.obs { filter: drop-shadow(1.5px 0 0 #eadeae) drop-shadow(-1.5px 0 0 #eadeae) drop-shadow(0 1.5px 0 #eadeae) drop-shadow(0 -1.5px 0 #eadeae) drop-shadow(0 0 7px rgba(233, 208, 109, 0.85)); }
+.pc.obs .eye { display: none; } /* o contorno dourado já marca quem está sendo observado */
+
+/* destaque de 1x1: sobra um de cada lado — os mortos saem, o vivo sobe para o topo */
+.cards .pc { transition: opacity 260ms ease, transform 300ms cubic-bezier(.2, .8, .2, 1), filter var(--t-fast); }
+.cards.duel .pc.out { opacity: 0; pointer-events: none; }
+.cards.l.duel .pc.out { transform: translateX(-60px); }
+.cards.r.duel .pc.out { transform: translateX(60px); }
+.cards .glow { position: absolute; top: -70px; width: 420px; height: 240px; opacity: 0; transition: opacity 400ms ease; pointer-events: none; }
+.cards.l .glow { left: -60px; background: radial-gradient(closest-side, color-mix(in srgb, var(--l-hi) 45%, transparent), transparent); }
+.cards.r .glow { left: -70px; background: radial-gradient(closest-side, color-mix(in srgb, var(--r-hi) 45%, transparent), transparent); }
+.cards.duel .glow { opacity: 1; }
+.cards .ddead { position: absolute; top: 104px; width: 291px; height: 52px; display: flex; align-items: center; justify-content: space-evenly; background: linear-gradient(0deg, rgba(13, 16, 28, 0.92), rgba(34, 37, 51, 0.35)); opacity: 0; transform: translateY(14px); transition: opacity 220ms ease, transform 220ms ease; pointer-events: none; }
+.cards.duel .ddead { opacity: 1; transform: none; transition-delay: 300ms; }
+.cards .ddead .di { width: 46px; height: 46px; position: relative; overflow: hidden; -webkit-mask: linear-gradient(0deg, rgba(0,0,0,.55), #000); mask: linear-gradient(0deg, rgba(0,0,0,.55), #000); }
+.cards .ddead .di img { position: absolute; left: 50%; top: 0; height: 100%; transform: translateX(-50%); filter: grayscale(1) brightness(.75); }
+.cards.r .ddead .di img { transform: translateX(-50%) scaleX(-1); }
+.cards .ddead .di .ph { position: absolute; inset: 0; display: grid; place-items: center; font: 700 9px var(--f-num); color: var(--mute); }
+.duelb { left: 610px; top: 96px; width: 700px; height: 46px; display: grid; grid-template-columns: 1fr 120px 1fr; align-items: center; opacity: 0; transform: translateY(-12px); transition: opacity 260ms ease, transform 260ms cubic-bezier(.2, .8, .2, 1); pointer-events: none; }
+.duelb.on { opacity: 1; transform: none; }
+.duelb .dv { height: 46px; display: grid; place-items: center; font: 800 26px/1 var(--f-num); color: #fff; letter-spacing: 2px; background: rgba(6, 10, 14, 0.94); clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 14px 100%, 0 50%); }
+.duelb .dn { height: 36px; display: flex; align-items: center; font: 700 18px/1 var(--f-num); color: #fff; white-space: nowrap; overflow: hidden; padding: 0 22px; }
+.duelb .dn.l { justify-content: flex-end; background: linear-gradient(270deg, var(--l-band) 0%, var(--l-band2) 55%, transparent 100%); border-right: 4px solid var(--l-hi); margin-right: -6px; }
+.duelb .dn.r { justify-content: flex-start; background: linear-gradient(90deg, var(--r-band) 0%, var(--r-band2) 55%, transparent 100%); border-left: 4px solid var(--r-hi); margin-left: -6px; }
+
+/* anel da ultimate */
+.ultring { position: relative; width: 100%; height: 100%; }
+.ultring svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ultring .disk { fill: #0d1114; stroke: rgba(0, 0, 0, 0.6); stroke-width: 1; }
+.ultring .sg { stroke: #3b4248; }
+.ultring .sg.on { stroke: #e9eef1; }
+.ultring img, .ultring .lt { position: absolute; left: 50%; top: 50%; width: 46%; height: 46%; transform: translate(-50%, -50%); object-fit: contain; filter: brightness(0) invert(1); }
+.ultring .lt { display: grid; place-items: center; font: 700 11px var(--f-num); color: #fff; }
+.ultring.ready.l .sg { stroke: var(--l-hi); }
+.ultring.ready.r .sg { stroke: var(--r-hi); }
+.ultring.ready .disk { fill: #151b20; }
+
+/* ---------- Câmera do jogador observado ---------- */
+.cam { left: 478px; top: 746px; width: 320px; height: 180px; transition: opacity var(--t-mid); }
+.cam .frame { position: absolute; inset: 0; }
+.cam .frame svg { width: 100%; height: 100%; }
+.cam .cn, .cam .ck { position: absolute; bottom: 14px; font: 700 18px/1 var(--f-num); color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85); }
+.cam .cn { left: 18px; max-width: 190px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cam .ck { right: 15px; }
+.cam .ktab { position: absolute; left: 3px; top: 3px; height: 21px; padding: 0 22px 0 9px; display: none; align-items: center; gap: 6px; font: 700 15px/1 var(--f-num); color: #fff; clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); }
+.cam .ktab.on { display: flex; }
+.cam .ktab svg { width: 15px; height: 15px; }
+.cam.l .ktab { background: var(--l-main); }
+.cam.r .ktab { background: var(--r-hi); }
+
+/* ---------- Fase de compra ---------- */
+.buy { opacity: 0; transition: opacity var(--t-mid) ease; pointer-events: none; }
+.stage.shop .buy { opacity: 1; }
+.stage.shop .combat { opacity: 0; }
+.combat { transition: opacity var(--t-mid) ease; }
+
+/* faixa publicitária / painel de estatísticas (522–1397 × 441–577) */
+.adwrap { left: 522px; top: 441px; width: 876px; height: 137px; display: none; } /* painel de aproveitamento: desligado (o Spectra não manda esse dado) */
+.adwrap > div { position: absolute; inset: 0; transition: opacity 300ms ease; }
+.ad img { width: 100%; height: 100%; object-fit: cover; }
+.stat { display: grid; grid-template-columns: 290px 1fr 290px; background: rgba(6, 12, 18, 0.94); }
+.stat::before, .stat::after { content: ""; position: absolute; top: 0; bottom: 0; width: 4px; }
+.stat::before { left: 0; background: var(--l-hi); }
+.stat::after { right: 0; background: var(--r-hi); }
+.stat .side { position: relative; display: flex; align-items: center; }
+.stat .side img { width: 72px; height: 56px; object-fit: contain; }
+.stat .side.l img { margin-left: 34px; }
+.stat .side.r { flex-direction: row-reverse; }
+.stat .side.r img { margin-right: 34px; }
+.stat .side .tx { flex: 1; text-align: center; }
+.stat .side .k { font: 700 22px/1 var(--f-num); }
+.stat .side.l .k { color: var(--l-hi); }
+.stat .side.r .k { color: var(--r-text); }
+.stat .side .v { margin-top: 10px; font: 800 44px/1 var(--f-num); color: #fff; }
+.stat .side .v small { font-size: 26px; }
+.stat .mid { position: relative; background: #0d1720 center / cover no-repeat; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.stat .mid::before { content: ""; position: absolute; inset: 0; background: rgba(4, 10, 16, 0.35); }
+.stat .mid b { position: relative; font: 900 30px/1 var(--f-num); color: #4fe3c5; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); }
+.stat .mid span { position: relative; margin-top: 8px; font: 700 18px/1 var(--f-num); color: #fff; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); }
+
+/* cabeçalho da compra (y 603–705) */
+.plate { top: 603px; width: 406px; height: 102px; overflow: visible; }
+.plate.l { left: 22px; background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 3px), repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.08) 0 1px, transparent 1px 3px), linear-gradient(90deg, var(--l-plate2) 0%, var(--l-plate) 100%); }
+.plate.r { left: 1492px; background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 3px), repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.08) 0 1px, transparent 1px 3px), linear-gradient(270deg, var(--r-plate2) 0%, var(--r-plate) 100%); }
+.plate .art { position: absolute; top: -38px; width: 205px; height: 140px; object-fit: contain; }
+.plate.l .art { left: 38px; }
+.plate.r .art { right: 38px; }
+/* sem arte de arma: logo grande e apagado, como marca d'água (referências 2 e 3) */
+.plate .art.wm { top: 4px; width: 230px; height: 94px; filter: brightness(0) invert(1); opacity: 0.16; }
+.plate.l .art.wm { left: 6px; object-position: left center; }
+.plate.r .art.wm { right: 6px; object-position: right center; }
+.plate .pn { position: absolute; top: 17px; font: 800 46px/1 var(--f-num); letter-spacing: 1px; color: #fff; white-space: nowrap; text-transform: uppercase; }
+.plate .pv { position: absolute; top: 68px; display: flex; align-items: center; gap: 6px; font: 700 20px/1 var(--f-num); color: #fff; white-space: nowrap; }
+.plate .pv .cv { width: 17px; height: 17px; }
+.plate.l .pn, .plate.l .pv { right: 21px; }
+.plate.r .pn, .plate.r .pv { left: 20px; }
+.midbar { left: 428px; top: 603px; width: 1064px; height: 102px; background: rgba(6, 12, 18, 0.96); }
+.tac { position: absolute; top: 0; width: 92px; height: 102px; background: rgba(10, 23, 31, 0.97); }
+.tac.l { left: 0; }
+.tac.r { left: 974px; width: 90px; }
+.tac b { position: absolute; left: 4px; right: 4px; top: 25px; text-align: center; font: 700 15px/1.15 var(--f-num); color: #fff; }
+.tac .bars { position: absolute; left: 0; right: 0; top: 73px; display: flex; justify-content: center; gap: 8px; }
+.tac .bars i { width: 30px; height: 5px; background: #2c404d; transition: background var(--t-mid); }
+.tac.l .bars i.on { background: var(--l-hi); }
+.tac.r .bars i.on { background: var(--r-hi); }
+.mini { position: absolute; left: 92px; top: 9px; width: 160px; }
+.mini div { display: flex; justify-content: flex-end; align-items: center; height: 42px; font: 700 27px/1 var(--f-num); }
+.mini div span:first-child { text-align: right; padding-right: 12px; white-space: nowrap; }
+.mini div span:last-child { width: 40px; text-align: left; }
+.mini .l { color: var(--l-text); }
+.mini .r { color: var(--r-text); }
+/* indicadores de rodada: 14 colunas de 51px; rodada jogada = duas células (linha de cima = time da esquerda),
+   o vencedor ganha a célula colorida com o motivo (cor do lado em que jogou), o outro mostra o número */
+.hist { position: absolute; left: 260px; top: 0; height: 102px; width: 714px; background: #070d12; }
+.hist .hc { position: absolute; width: 50px; height: 47px; display: grid; place-items: center; font: 700 27px/1 var(--f-num); color: #fff; }
+.hist .hc.t { top: 3px; }
+.hist .hc.b { top: 52px; }
+.hist .hc.att { background: var(--att-cell); }
+.hist .hc.def { background: var(--def-cell); }
+.hist .hc svg { width: 24px; height: 24px; }
+.hist .otl { font-size: 13px !important; letter-spacing: .5px; color: #9fb0c0 !important; }
+.hist .hn { position: absolute; top: 0; width: 50px; height: 102px; display: grid; place-items: center; font: 700 29px/1 var(--f-num); color: #fff; }
+.hist .hn.old { color: #6f7c88; }
+.hist .mk { position: absolute; width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; }
+.hist .mk.t { top: 14px; border-top: 7px solid #6e8293; }
+.hist .mk.b { top: 81px; border-bottom: 7px solid #6e8293; }
+.hist .sw { position: absolute; top: 0; width: 50px; height: 102px; }
+.hist .sw i { position: absolute; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; }
+.hist .sw i.a { left: 11px; top: 38px; border-top: 11px solid #fff; }
+.hist .sw i.z { left: 25px; top: 53px; border-bottom: 11px solid #fff; }
+.hist .dot { position: absolute; top: 49px; width: 5px; height: 5px; border-radius: 50%; background: #6c757d; }
+
+/* tabela econômica (y 718–1057) */
+.econ { top: 718px; height: 340px; }
+.econ.l { left: 17px; width: 940px; }
+.econ.r { left: 962px; width: 933px; }
+.econ .acc { position: absolute; top: 0; bottom: 0; width: 4px; }
+.econ.l .acc { left: 0; background: var(--l-hi); }
+.econ.r .acc { right: 0; background: var(--r-hi); }
+.er { position: absolute; left: 0; right: 0; height: 67px; background: var(--row); }
+.er .c { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; }
+.er .vr { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--rule); }
+.er .money { font: 700 24px/1 var(--f-num); gap: 0; }
+.er .money .sp { color: var(--spent); min-width: 70px; text-align: right; }
+.er .money .mw { display: flex; align-items: center; white-space: nowrap; }
+.er .face .ph { position: absolute; inset: 0; display: grid; place-items: center; font: 700 10px var(--f-num); color: var(--mute); text-align: center; }
+.er .money .cv { width: 18px; height: 18px; margin: 0 4px; }
+.er .money .cr { color: #fff; }
+.er .face { position: absolute; top: 1px; width: 66px; height: 66px; overflow: hidden; background: #070a0e; }
+.er .face img { height: 100%; width: auto; position: absolute; left: 50%; transform: translateX(-50%); }
+.er .nm { font: 700 18px/1 var(--f-num); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; display: block; }
+.er .kd { font: 700 24px/1 var(--f-num); letter-spacing: 0.5px; }
+.er .kd i { font-style: normal; color: #6f7b86; }
+.er .wcell .ws { position: absolute; top: 0; bottom: 0; width: 120px; display: flex; align-items: center; justify-content: center; }
+.er .wcell .ss { position: absolute; top: 0; bottom: 0; width: 30px; display: flex; align-items: center; justify-content: center; }
+.er .wcell .wpi { max-height: 22px; max-width: 120px; }
+.er .shi { width: 26px; height: 26px; object-fit: contain; }
+.er .ults { width: 36px; height: 36px; }
+.er .abl { display: flex; }
+.er .abl .ab { width: 41px; height: 34px; }
+.er .abl .ab img, .er .abl .ab .lt { width: 19px; height: 19px; }
+.er .abl .ab .dots { margin-top: 5px; }
+
+/* aviso de prévia */
+.demo-tag { right: 10px; bottom: 6px; font: 600 11px/1 var(--f-num); color: rgba(255, 255, 255, 0.55); letter-spacing: 1px; text-transform: uppercase; }
+.status { left: 16px; top: 44px; padding: 6px 10px; background: rgba(0, 0, 0, 0.7); font: 600 14px var(--f-num); color: #ffd36b; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* =====================================================================
+   SELEÇÃO DE AGENTES (fase LOBBY do Spectra) — faixa inferior estilo VCT CN
+   esquerda/direita: 5 cartões por time na cor do lado; centro: logo, mapa, times e lados
+   ===================================================================== */
+.asel { left: 0; top: 832px; width: 1920px; height: 232px; pointer-events: none; visibility: hidden; }
+.asel { transition: visibility 0s linear 700ms; }
+.asel.on { visibility: visible; transition-delay: 0s; }
+.asel .frame { position: absolute; left: 6px; top: -8px; width: 1908px; height: 234px; border-radius: 8px; background: rgba(14, 16, 20, 0.94); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45); opacity: 0; transform: translateY(24px); transition: opacity 260ms ease 380ms, transform 260ms ease 380ms; }
+.asel.on .frame { opacity: 1; transform: none; transition-delay: 0ms; }
+.asel .side { position: absolute; top: 0; width: 770px; height: 218px; display: flex; overflow: hidden; }
+.asel .side.l { left: 14px; }
+.asel .side.r { left: 1136px; }
+.asel .edge { position: absolute; top: 0; width: 3px; height: 218px; transform: scaleY(0); transition: transform 300ms cubic-bezier(.2, .8, .2, 1) 0ms; }
+.asel .edge.l { left: 784px; background: var(--l-hi); box-shadow: 0 0 10px var(--l-hi); }
+.asel .edge.r { left: 1133px; background: var(--r-hi); box-shadow: 0 0 10px var(--r-hi); }
+.asel.on .edge { transform: none; transition-delay: 120ms; }
+/* cartão do jogador */
+.asc { position: relative; width: 154px; height: 218px; flex: none; overflow: hidden;
+  clip-path: inset(100% 0 0 0); transition: clip-path 380ms cubic-bezier(.2, .8, .2, 1); transition-delay: calc(var(--i) * 55ms); }
+.asel.on .asc { clip-path: inset(0 0 0 0); transition-delay: calc(240ms + var(--i) * 70ms); }
+.asc + .asc { border-left: 1px solid rgba(0, 0, 0, 0.55); }
+.asc .bg { position: absolute; inset: 0; }
+.side.l .asc .bg { background: radial-gradient(rgba(255, 255, 255, 0.16) 0.9px, transparent 1.3px) 0 0 / 5px 5px, linear-gradient(180deg, var(--l-plate) 0%, var(--l-main) 45%, var(--l-band) 100%); }
+.side.r .asc .bg { background: radial-gradient(rgba(255, 255, 255, 0.16) 0.9px, transparent 1.3px) 0 0 / 5px 5px, linear-gradient(180deg, var(--r-plate) 0%, var(--r-main) 45%, var(--r-band) 100%); }
+.asc .ag { position: absolute; left: 50%; bottom: 0; height: 218px; width: auto; max-width: none; transform: translateX(-50%); transition: opacity 200ms ease, filter 200ms ease; }
+.asc .ag.sw { animation: asSwap 220ms ease-out; }
+@keyframes asSwap { from { opacity: 0; transform: translateX(-50%) translateY(10px); } }
+.asc.hov .ag { opacity: 0.55; filter: grayscale(0.6) brightness(0.85); }
+.asc .none { position: absolute; inset: 0; display: grid; place-items: center; font: 800 54px/1 var(--f-num); color: rgba(255, 255, 255, 0.16); }
+.asc .shade { position: absolute; left: 0; right: 0; bottom: 0; height: 70px; background: linear-gradient(0deg, rgba(0, 0, 0, 0.78), transparent); }
+.asc .nm { position: absolute; left: 4px; right: 4px; bottom: 13px; text-align: center; font: 700 18px/1 var(--f-num); color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8); }
+.asc .role { position: absolute; left: 7px; top: 7px; width: 27px; height: 27px; display: grid; place-items: center; border-radius: 2px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); transition: opacity 200ms ease; }
+.side.l .asc .role { background: var(--l-hi); }
+.side.r .asc .role { background: var(--r-hi); }
+.asc .role img { width: 21px; height: 21px; }
+.asc.hov .role { opacity: 0.55; }
+.asc .role:empty { display: none; }
+.asc .flash { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0)); opacity: 0; }
+.asc.lockfx .flash { animation: asLock 520ms ease-out; }
+@keyframes asLock { 0% { opacity: 1; } 100% { opacity: 0; } }
+/* centro */
+.asel .mid { position: absolute; left: 787px; top: 0; width: 346px; height: 218px; background: linear-gradient(180deg, #2b343b 0%, #20272d 100%); transform: scaleX(0); transition: transform 320ms cubic-bezier(.2, .8, .2, 1) 260ms; }
+.asel.on .mid { transform: none; transition-delay: 0ms; }
+.asel .mid > * { opacity: 0; transition: opacity 200ms ease 0ms; }
+.asel.on .mid > * { opacity: 1; transition-delay: 260ms; }
+.asel .mid .flag { position: absolute; left: 63px; top: 0; width: 220px; height: 48px; background: linear-gradient(160deg, var(--brand-a) 0%, #38147a 45%, var(--brand-b) 100%); clip-path: polygon(0 0, 100% 0, 100% 62%, 88% 100%, 12% 100%, 0 62%); display: grid; place-items: center; }
+.asel .mid .flag img { max-width: 168px; max-height: 30px; margin-top: -3px; }
+.asel .mid .flag b { font: 800 20px/1 var(--f-num); letter-spacing: 3px; color: #fff; }
+.asel .mid .ears { position: absolute; top: 0; height: 9px; width: 63px; background: #4a5359; }
+.asel .mid .ears.l { left: 0; clip-path: polygon(0 0, 100% 0, 100% 100%, 9px 100%); }
+.asel .mid .ears.r { right: 0; clip-path: polygon(0 0, 100% 0, calc(100% - 9px) 100%, 0 100%); }
+.asel .mid .map { position: absolute; left: 0; right: 0; top: 64px; text-align: center; font: 700 19px/1 var(--f-num); color: #fff; letter-spacing: 1px; text-transform: uppercase; }
+.asel .mid .vs { position: absolute; left: 16px; right: 16px; top: 103px; display: grid; grid-template-columns: 1fr 44px 1fr; align-items: center; }
+.asel .mid .vs .tn { font: 800 40px/1 var(--f-num); color: #fff; white-space: nowrap; overflow: hidden; }
+.asel .mid .vs .tn.l { text-align: left; }
+.asel .mid .vs .tn.r { text-align: right; }
+.asel .mid .vs i { font: 700 20px/1 var(--f-num); font-style: normal; color: #fff; text-align: center; }
+.asel .mid .sd { position: absolute; top: 172px; font: 700 18px/1 var(--f-num); letter-spacing: 1px; }
+.asel .mid .sd.l { left: 22px; color: var(--l-text); }
+.asel .mid .sd.r { right: 22px; color: var(--r-text); }
+/* durante a seleção o resto da HUD sai de cena */
+.asel { z-index: 5; }
+.stage > .abs:not(.asel) { transition: opacity 300ms ease 650ms; } /* volta só depois da faixa sair */
+.stage.asel-on > .abs:not(.asel):not(.dbg) { opacity: 0 !important; transition-delay: 0ms; }
+
+/* =====================================================================
+   COMUNICAÇÃO AO VIVO (listen-in): áudio + câmera dos 5 de um time, via câmeras dos jogadores do Spectra (VDO.Ninja)
+   cor = cor do lado do time; quem fala acende
+   ===================================================================== */
+.li { left: 384px; top: 820px; width: 1152px; height: 214px; pointer-events: none; visibility: hidden; --li: var(--l-hi); --lim: var(--l-main); --lib: var(--l-band); }
+.li.t-r { --li: var(--r-hi); --lim: var(--r-main); --lib: var(--r-band); }
+.li.on, .li.out { visibility: visible; }
+.li .tab { position: absolute; left: 0; top: 0; height: 36px; padding: 0 22px 0 14px; display: flex; align-items: center; gap: 12px;
+  background: radial-gradient(rgba(255, 255, 255, 0.16) 0.9px, transparent 1.3px) 0 0 / 5px 5px, linear-gradient(90deg, var(--li), var(--lim));
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 100%, 0 100%); }
+.li .tab svg { width: 15px; height: 15px; color: #fff; }
+.li .tab b { font: 800 18px/1 var(--f-num); letter-spacing: 1.5px; text-transform: uppercase; color: #fff; white-space: nowrap; }
+.li .tab img { height: 28px; max-width: 90px; object-fit: contain; }
+.li .rule { position: absolute; left: 0; right: 0; top: 33px; height: 3px; background: linear-gradient(90deg, var(--li), color-mix(in srgb, var(--li) 35%, transparent)); }
+.li .body { position: absolute; left: 0; top: 36px; width: 100%; height: 178px; display: flex; gap: 6px; padding: 14px 14px 14px 20px;
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 3px), rgba(8, 12, 17, 0.94); }
+.li .body::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--li); }
+.li .tile { position: relative; flex: 1; height: 150px; overflow: hidden; background: radial-gradient(rgba(255, 255, 255, 0.12) 0.9px, transparent 1.3px) 0 0 / 5px 5px, linear-gradient(180deg, var(--lim), var(--lib)); }
+.li .tile .ph { position: absolute; left: 50%; bottom: 0; height: 150px; transform: translateX(-50%); opacity: 0.55; filter: grayscale(0.4); }
+.li .tile iframe { position: absolute; left: 50%; top: 0; width: 267px; height: 150px; transform: translateX(-50%); border: 0; }
+.li .tile .sh { position: absolute; left: 0; right: 0; bottom: 0; height: 56px; background: linear-gradient(0deg, rgba(0, 0, 0, 0.8), transparent); }
+.li .tile .nm { position: absolute; left: 10px; right: 34px; bottom: 11px; text-align: center; font: 800 19px/1 var(--f-num); text-transform: uppercase; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7); }
+.li .tile .spk { position: absolute; right: 10px; bottom: 11px; width: 18px; height: 18px; color: rgba(255, 255, 255, 0.35); transition: color 120ms ease, filter 120ms ease; }
+.li .tile .ring { position: absolute; inset: 0; border: 3px solid var(--li); opacity: 0; transition: opacity 120ms ease; box-shadow: inset 0 0 18px color-mix(in srgb, var(--li) 55%, transparent); }
+.li .tile.talk .spk { color: var(--li); filter: drop-shadow(0 0 6px var(--li)); }
+.li .tile.talk .ring { opacity: 1; }
+/* entrada: a aba e a linha abrem, depois os 5 quadros sobem um a um; saída ao contrário */
+.li .tab, .li .rule, .li .body { transition: clip-path 380ms cubic-bezier(.2, .8, .2, 1), transform 380ms cubic-bezier(.2, .8, .2, 1), opacity 260ms ease; }
+.li .rule { transform-origin: 0 50%; transform: scaleX(0); }
+.li .tab { clip-path: polygon(0 0, 0 0, 0 100%, 0 100%); }
+.li .body { clip-path: inset(0 0 100% 0); }
+.li .tile { opacity: 0; transform: translateY(16px); transition: opacity 260ms ease, transform 320ms cubic-bezier(.2, .8, .2, 1); transition-delay: calc((4 - var(--i)) * 50ms); }
+.li.on .rule { transform: none; transition-delay: 120ms; }
+.li.on .tab { clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 100%, 0 100%); }
+.li.on .body { clip-path: inset(0 0 0 0); transition-delay: 220ms; }
+.li.on .tile { opacity: 1; transform: none; transition-delay: calc(380ms + var(--i) * 70ms); }
+.li.out .tab { transition-delay: 380ms; } .li.out .rule { transition-delay: 300ms; } .li.out .body { transition-delay: 240ms; }
+</style>
+</head>
+<body>
+<div class="viewport" id="viewport"></div>
+<script>
+(() => {
+  "use strict";
+
+  // =====================================================================
+  //  CONFIGURAÇÃO — tudo o que costuma mudar entre eventos fica aqui
+  // =====================================================================
+  const CONFIG = {
+    servidor: "",              // ex.: "http://localhost:5200" (vazio: usa ?server= ou localhost:5200)
+    codigo: "",                // groupCode digitado no capturador (vazio: usa ?groupCode=)
+    recursos: "Resources/",    // pasta de imagens e fontes, relativa a este arquivo (ou ?assets=)
+    fase: "",                  // texto do canto superior direito (ex.: "Chave inferior · Rodada 1"); vazio usa tournamentInfo.name
+    camera: false,             // moldura da câmera do jogador observado (desligada; ligue em config.js com camera: true)
+    faixaPublicidade: false,   // true: na compra, alterna o painel de estatísticas com as artes Logos/bannerN.png
+    trocaPublicidade: 8,       // segundos entre a faixa publicitária e o painel de estatísticas na compra
+    corPorLado: true,          // como no VCT CN: defesa verde, ataque vermelho (false: esquerda sempre verde)
+    trocaPatrocinio: 6,        // segundos entre as artes do bloco do evento (quando o Spectra não manda o tempo)
+    quadroVitoria: true,       // quadro "ROUND WIN" no fim de cada rodada (artes em Resources/RoundWin)
+    quadroVitoriaSeg: 6,       // segundos na tela
+    listenIn: true,            // comunicação ao vivo: liga/desliga pelo Spectra Client (false = nunca mostra)
+    destaque1x1: true,         // 1x1: some com os mortos, sobe o vivo de cada lado e mostra "nome 1 x 1 nome"
+    patrocinadoresLocais: false, // true: sem patrocinadores no Spectra, usa as artes de Resources/Sponsors
+    armasParaDireita: false,   // as imagens de Armas/ apontam o cano para a direita? (false: apontam para a esquerda, como na pasta Resources)
+    duracao: { compra: 30, combate: 100, spike: 45 },
+  };
+  // config.js (mesma pasta) sobrescreve os valores acima sem precisar editar este arquivo
+  if (window.HUD_CONFIG) {
+    const C = window.HUD_CONFIG;
+    if (C.servidor) CONFIG.servidor = C.servidor;
+    if (C.codigo) CONFIG.codigo = C.codigo;
+    if (C.recursos) CONFIG.recursos = C.recursos;
+    if (C.fase) CONFIG.fase = C.fase;
+    if (typeof C.camera === "boolean") CONFIG.camera = C.camera;
+    if (typeof C.listenIn === "boolean") CONFIG.listenIn = C.listenIn;
+    if (typeof C.corPorLado === "boolean") CONFIG.corPorLado = C.corPorLado;
+    if (typeof C.armasParaDireita === "boolean") CONFIG.armasParaDireita = C.armasParaDireita;
+  }
+  // no vídeo as armas do time da esquerda apontam para a direita (para o centro) e as do time da direita para a esquerda
+  const FLIP_SIDE = CONFIG.armasParaDireita ? "r" : "l";
+  // =====================================================================
+
+  // textos da HUD (todos em português)
+  const L10N = { cur: "Mapa atual", next: "Próximo", dec: "Decisivo", round: "Rodada ", tac: "Pausa tática", eq: "Equipamento", def: "Vitórias na defesa", att: "Vitórias no ataque", rate: "Aproveitamento", pause: "Pausa", tech: "Pausa técnica", ot: "Prorrogação", otShort: "PRORR.", atk: "ATAQUE", dfs: "DEFESA" };
+  const MAP_NAMES = { Triad: "Haven", Bonsai: "Split", Duality: "Bind", Port: "Icebox", Foxtrot: "Breeze", Canyon: "Fracture", Pitt: "Pearl", Jam: "Lotus", Juliett: "Sunset", Infinity: "Abyss", Rook: "Corrode", Ascent: "Ascent" };
+  const AGENTS = {
+    AggroBot: "Gekko", BountyHunter: "Fade", Breach: "Breach", Cable: "Deadlock", Cashew: "Tejo", Clay: "Raze", Deadeye: "Chamber",
+    Grenadier: "KAY/O", Guide: "Skye", Gumshoe: "Cypher", Hunter: "Sova", Iris: "Miks", Killjoy: "Killjoy", Mage: "Harbor", Nox: "Vyse",
+    Pandemic: "Viper", Pine: "Veto", Phoenix: "Phoenix", Rift: "Astra", Sarge: "Brimstone", Sequoia: "Iso", Smonk: "Clove", Sprinter: "Neon",
+    Stealth: "Yoru", Terra: "Waylay", Thorne: "Sage", Vampire: "Reyna", Wraith: "Omen", Wushu: "Jett",
+  };
+  const FOLDER = { "KAY/O": "Kayo" };
+  const COST = { Classic: 0, Shorty: 150, Frenzy: 450, Ghost: 500, Sheriff: 800, Stinger: 1100, Spectre: 1600, Bucky: 850, Judge: 1850, Bulldog: 2050, Guardian: 2250, Phantom: 2900, Vandal: 2900, Warden: 2900, Marshal: 950, Outlaw: 2400, Operator: 4700, Ares: 1600, Odin: 3200, Bandit: 0, Heavy: 1000, Light: 400, Regen: 650 };
+  const ARMOR = { Heavy: 50, Light: 25, Regen: 25 };
+  const SHIELD_IMG = { Heavy: "Escudo50.png", Light: "Escudo100.png", Regen: "EscudoReg.png" };
+
+  const params = new URLSearchParams(location.search);
+  const groupCode = (params.get("groupCode") || CONFIG.codigo || "").toUpperCase();
+  const SERVER = params.get("server") || CONFIG.servidor || "http://localhost:5200";
+  const MODE = groupCode && !params.has("demo") ? "live" : "demo"; // ?demo força a prévia simulada
+  const DEBUG = params.has("debug");
+  const CLEAN = params.has("clean");
+  let BASE = params.get("assets") || CONFIG.recursos;
+  if (BASE && !BASE.endsWith("/")) BASE += "/";
+
+  const agentName = (raw) => { const k = String(raw || "").replace(/_PC_C$/i, ""); return AGENTS[k] || Object.entries(AGENTS).find(([a]) => a.toLowerCase() === k.toLowerCase())?.[1] || k; };
+  const mapName = (m) => MAP_NAMES[m] || m || "";
+  const mapLabel = (m) => mapName(m);
+  const money = (n) => Math.round(n || 0).toLocaleString("en-US");
+  const fmtTime = (s) => { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+  const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const A = (p) => BASE + p.split("/").map(encodeURIComponent).join("/");
+  const agentImg = (internal, slot) => { const n = agentName(internal); if (!n) return ""; const f = FOLDER[n] || n; return A(`Agentes/${f}/${slot ? slot : f}.png`); };
+  const weaponImg = (w) => (w && w !== "Knife" ? A(`Armas/${w}.png`) : w === "Knife" ? A("Armas/Knife.png") : "");
+
+  // ícones vetoriais (reserva quando falta a imagem)
+  const SPIKE_SVG = '<svg viewBox="0 0 100 92"><path d="M10 9h80L50 83z" fill="currentColor" stroke="currentColor" stroke-width="14" stroke-linejoin="round"/><circle cx="50" cy="38" r="22" fill="#0e131b"/><circle cx="50" cy="38" r="15" fill="currentColor"/><path d="m50 29 8 4.5v9L50 47l-8-4.5v-9z" fill="#0e131b"/></svg>';
+  const EYE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>';
+  const CREDIT_SVG = '<svg class="cv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 3l10 10M13 3 3 13"/><circle cx="8" cy="8" r="3.4" fill="#0b1219"/></svg>';
+  const SHIELD_SVG = '<svg viewBox="0 0 17 19"><path d="M8.5 0.5 16 3.4v6.1c0 4.2-3.1 7.4-7.5 9-4.4-1.6-7.5-4.8-7.5-9V3.4z" fill="#030405"/></svg>';
+  const SWAP_SVG = '<svg viewBox="0 0 22 30"><path d="M1 2h11L6.5 11z" fill="#fff"/><path d="M10 28h11l-5.5-9z" fill="#fff"/></svg>';
+  const WIN_TYPES = { kills: 1, defused: 1, detonated: 1, timeout: 1 };
+  const REASON_SVG = {
+    // eliminação: círculo com X saindo pelas pontas
+    kills: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"><circle cx="12" cy="12" r="6.6"/><path d="M4.5 4.5l15 15M19.5 4.5l-15 15"/></svg>',
+    // spike desarmada: alicate
+    defused: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 8.8C8.3 7.3 7.6 4.6 9.6 2.2M13 8.8c2.7-1.5 3.4-4.2 1.4-6.6"/><path d="M11 11.3C8.9 14.2 7 17.5 5.6 21.6M13 11.3c2.1 2.9 4 6.2 5.4 10.3"/><circle cx="12" cy="10" r="2.1" fill="#fff" stroke="none"/></svg>',
+    // spike detonada: explosão
+    detonated: '<svg viewBox="0 0 24 24" fill="#fff"><path d="M1.5 18.5 4.3 13l1.6 2.2L7.6 8.6l2.6 4.3L12 4.5l1.9 8.2 2.5-4.3 1.7 6.6 1.7-2.2 2.7 5.7c-3.4 1.5-6.9 2-10.5 2s-7.1-.5-10.1-2z"/></svg>',
+    // acabou o tempo: relógio
+    timeout: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8.2"/><path d="M12 8.3V13l3.2 2.2M9.5 2.5h5"/></svg>',
+  };
+  const KILL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg>';
+  let CREDIT = CREDIT_SVG; // trocado pela imagem Escudos/CV.png quando ela existir
+  let SPIKE_HTML = SPIKE_SVG; // trocado pela máscara de spike.png quando ela existir
+
+  // ---------- palco ----------
+  const viewport = document.getElementById("viewport");
+  viewport.innerHTML = `
+  <div class="stage" id="stage">
+    <div class="abs info-band"></div>
+    <div class="abs info l" id="info-l"></div>
+    <div class="abs info r" id="info-r"></div>
+    <div class="abs brand" id="brand"><img id="brand-a" alt=""><img id="brand-b" alt="" style="opacity:0"></div>
+    <div class="abs bug" id="bug">
+      <svg width="1920" height="90" viewBox="0 0 1920 90" aria-hidden="true">
+        <defs>
+          <pattern id="dots" width="3" height="3" patternUnits="userSpaceOnUse"><rect width="1" height="3" fill="#fff" opacity=".07"/><rect y="2" width="3" height="1" fill="#000" opacity=".08"/></pattern>
+          <linearGradient id="gl" x1="0" x2="1"><stop offset="0" style="stop-color:var(--l-main);stop-opacity:.92"/><stop offset="1" style="stop-color:var(--l-main)"/></linearGradient>
+          <linearGradient id="gr" x1="1" x2="0"><stop offset="0" style="stop-color:var(--r-main);stop-opacity:.88"/><stop offset="1" style="stop-color:var(--r-main)"/></linearGradient>
+        </defs>
+        <polygon points="559,0 830,0 864,47 784,47 770,61 607,61" style="fill:url(#gl)"/>
+        <polygon points="559,0 830,0 864,47 784,47 770,61 607,61" fill="url(#dots)"/>
+        <polygon points="1361,0 1090,0 1056,47 1136,47 1150,61 1313,61" style="fill:url(#gr)"/>
+        <polygon points="1361,0 1090,0 1056,47 1136,47 1150,61 1313,61" fill="url(#dots)"/>
+        <polygon points="836,0 1084,0 1027,80 893,80" fill="#0f1520" fill-opacity=".97"/>
+        <polygon points="827,0 836,0 870,47 861,47" style="fill:var(--l-hi)"/>
+        <polygon points="1093,0 1084,0 1050,47 1059,47" style="fill:var(--r-hi)"/>
+        <g id="pips-l"></g><g id="pips-r"></g>
+      </svg>
+      <img class="logo l" id="logo-l" alt="">
+      <div class="tn l" id="tn-l"></div>
+      <div class="sc l" id="sc-l">0</div>
+      <div class="rnd" id="rnd"></div>
+      <div class="time" id="time">0:00</div>
+      <div class="spk" id="spk">${SPIKE_SVG}</div>
+      <div class="sc r" id="sc-r">0</div>
+      <div class="tn r" id="tn-r"></div>
+      <img class="logo r" id="logo-r" alt="">
+      <div class="seed l" id="seed-l"></div><div class="seed r" id="seed-r"></div>
+    </div>
+    <div class="abs pause" id="pause">
+      <svg width="788" height="178" viewBox="0 0 788 178" aria-hidden="true">
+        <defs>
+          <radialGradient id="pz-team" cx="50%" cy="135%" r="95%"><stop offset="0" style="stop-color:var(--pz-c);stop-opacity:.95"/><stop offset="1" stop-color="#0a0f14" stop-opacity=".94"/></radialGradient>
+          <linearGradient id="pz-wl" x1="0" x2="1"><stop offset="0" stop-color="#0a0f14" stop-opacity="0"/><stop offset="1" stop-color="#0a0f14" stop-opacity=".95"/></linearGradient>
+          <linearGradient id="pz-wr" x1="1" x2="0"><stop offset="0" stop-color="#0a0f14" stop-opacity="0"/><stop offset="1" stop-color="#0a0f14" stop-opacity=".95"/></linearGradient>
+        </defs>
+        <path d="M87 0H701V51L692 67V108L701 123V178H87V123L96 108V67L87 51Z" fill="url(#pz-team)"/>
+        <path d="M87 0H701V51L692 67V108L701 123V178H87V123L96 108V67L87 51Z" fill="url(#dots)"/>
+        <path d="M87 0H701V4H87Z" style="fill:var(--pz-h)"/>
+        <path d="M300 178L312 170H476L488 178Z" style="fill:var(--pz-h)"/>
+      </svg>
+      <div class="wm" id="pz-wm"></div>
+      <div class="pt" id="pz-t"></div>
+      <div class="pl" id="pz-l"><span id="pz-side"></span><img id="pz-logo" alt=""><span id="pz-tri"></span></div>
+      <div class="pb"><i id="pz-bar"></i></div><div class="ps" id="pz-s"></div>
+    </div>
+    <div class="abs rwin" id="rwin"><img id="rwin-bg" alt=""><div class="rr" id="rwin-r"></div><div class="rt" id="rwin-t"></div></div>
+    <div class="abs toast" id="toast"><img id="toast-logo" alt=""><div class="tx"><b id="toast-t"></b><span id="toast-m"></span></div></div>
+
+    <div class="abs asel" id="asel">
+      <i class="frame"></i>
+      <div class="side l" id="as-l"></div>
+      <i class="edge l"></i>
+      <div class="mid">
+        <i class="ears l"></i><i class="ears r"></i>
+        <div class="flag" id="as-flag"><b>LOOKING</b></div>
+        <div class="map" id="as-map"></div>
+        <div class="vs"><span class="tn l" id="as-tl"></span><i>vs</i><span class="tn r" id="as-tr"></span></div>
+        <div class="sd l" id="as-sl"></div><div class="sd r" id="as-sr"></div>
+      </div>
+      <i class="edge r"></i>
+      <div class="side r" id="as-r"></div>
+    </div>
+    <div class="abs li" id="li">
+      <i class="rule"></i>
+      <div class="tab"><svg viewBox="0 0 16 16"><path d="M3 2l11 6-11 6z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg><b>// Comunicação ao vivo</b><img id="li-logo" alt=""></div>
+      <div class="body" id="li-body"></div>
+    </div>
+    <div class="abs cards l combat" id="cards-l"></div>
+    <div class="abs cards r combat" id="cards-r"></div>
+    <div class="abs duelb combat" id="duel"><div class="dn l" id="duel-l"></div><div class="dv">1 x 1</div><div class="dn r" id="duel-r"></div></div>
+    <div class="abs cam combat" id="cam">
+      <div class="frame"><svg viewBox="0 0 320 180" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M1 1h86l6 4h134l6-4h86v178h-86l-6-4H93l-6 4H1z" fill="none" stroke="#1b2531" stroke-width="2.5"/>
+        <path d="M0 20V0h20M300 0h20v20M320 160v20h-20M20 180H0v-20" fill="none" stroke="#3b4a59" stroke-width="2"/>
+      </svg></div>
+      <div class="ktab" id="cam-k"><span id="cam-kn">1</span>${KILL_SVG}</div>
+      <div class="cn" id="cam-n"></div>
+      <div class="ck" id="cam-kda"></div>
+    </div>
+
+    <div class="abs adwrap buy" id="adwrap">
+      <div class="ad" id="ad" style="opacity:0"><img id="ad-img" alt=""></div>
+      <div class="stat" id="stat" style="opacity:1">
+        <div class="side l"><img id="st-logo-l" alt=""><div class="tx"><div class="k" id="st-k-l"></div><div class="v" id="st-v-l"></div></div></div>
+        <div class="mid" id="st-mid"><b id="st-t"></b><span id="st-m"></span></div>
+        <div class="side r"><img id="st-logo-r" alt=""><div class="tx"><div class="k" id="st-k-r"></div><div class="v" id="st-v-r"></div></div></div>
+      </div>
+    </div>
+    <div class="abs plate l buy" id="plate-l"><img class="art" id="art-l" alt=""><div class="pn" id="pn-l"></div><div class="pv"><span class="lb">${L10N.eq}</span><span class="cvw" id="cv-l"></span><span id="pv-l"></span></div></div>
+    <div class="abs midbar buy">
+      <div class="tac l"><b>Pausa<br>tática</b><div class="bars" id="tac-l"></div></div>
+      <div class="mini"><div class="l"><span id="mn-l"></span><span id="ms-l"></span></div><div class="r"><span id="mn-r"></span><span id="ms-r"></span></div></div>
+      <div class="hist" id="hist"></div>
+      <div class="tac r"><b>Pausa<br>tática</b><div class="bars" id="tac-r"></div></div>
+    </div>
+    <div class="abs plate r buy" id="plate-r"><img class="art" id="art-r" alt=""><div class="pn" id="pn-r"></div><div class="pv"><span class="cvw" id="cv-r"></span><span id="pv-r"></span><span class="lb">${L10N.eq}</span></div></div>
+    <div class="abs econ l buy" id="econ-l"><i class="acc"></i></div>
+    <div class="abs econ r buy" id="econ-r"><i class="acc"></i></div>
+
+    <div class="abs demo-tag hidden" id="demo-tag">Prévia · dados simulados</div>
+    <div class="abs status hidden" id="status"></div>
+    <div class="abs dbg hidden" id="dbg"></div>
+  </div>`;
+
+  const $ = (id) => document.getElementById(id);
+  const stage = $("stage");
+  const fit = () => {
+    const w = innerWidth, h = innerHeight, s = Math.min(w / 1920, h / 1080);
+    stage.style.setProperty("--s", String(s));
+    stage.style.left = Math.round((w - 1920 * s) / 2) + "px";
+    stage.style.top = Math.round((h - 1080 * s) / 2) + "px";
+  };
+  addEventListener("resize", fit); fit();
+  // imagem que não carregou some, em vez de mostrar o ícone quebrado
+  stage.addEventListener("error", (e) => { const t = e.target; if (t.tagName !== "IMG" || t.classList.contains("art")) return; if (t.dataset.fb) { const fb = t.dataset.fb; t.removeAttribute("data-fb"); t.outerHTML = fb; } else t.style.visibility = "hidden"; }, true);
+
+  const setText = (n, t) => { t = String(t ?? ""); if (n.textContent !== t) n.textContent = t; };
+  const setHTML = (n, h, key) => { key = key ?? h; if (n._k !== key) { n._k = key; n.innerHTML = h; } };
+  const setSrc = (img, src) => { if (!src) { img.style.visibility = "hidden"; img.removeAttribute("src"); return; } if (img.getAttribute("src") !== src) { img.style.visibility = ""; img.src = src; } };
+  const fitText = (el, max) => { el.style.transform = ""; const w = el.scrollWidth; if (w > max) el.style.transform = `scaleX(${(max / w).toFixed(3)})`; };
+
+  // pontos de série (paralelogramos sob o placar)
+  function pipsSVG(side, need, won) {
+    // cabem no recorte entre a placa do time e o centro escuro (x 788 a 862, y 51 a 60), sem encostar em nenhum dos dois
+    if (!need) return "";
+    const gap = 6, sk = 7, right = 862, left = 788;
+    const w = Math.min(22, Math.floor((right - left - (need - 1) * gap) / need));
+    let s = "";
+    for (let k = 0; k < need; k++) {
+      const x = right - w - k * (w + gap); // k = 0 é o mais perto do centro
+      const pts = side === "l"
+        ? [[x, 51], [x + w, 51], [x + w + sk, 60], [x + sk, 60]]
+        : [[1920 - x, 51], [1920 - x - w, 51], [1920 - x - w - sk, 60], [1920 - x - sk, 60]];
+      s += `<polygon class="pip ${side}${k < won ? " won" : ""}" points="${pts.map((q) => q.join(",")).join(" ")}"/>`;
+    }
+    return s;
+  }
+
+  // ---------- cartões ----------
+  function buildCards(el, side) {
+    const out = [];
+    for (let i = 0; i < 5; i++) {
+      const c = document.createElement("div");
+      c.className = "pc";
+      c.style.top = i * 100 + "px";
+      c.innerHTML = `<i class="bgt"></i><i class="obsg"></i><i class="band"></i><i class="dbase"></i>
+        <div class="face" data-k="face"></div>
+        <div class="name" data-k="name"></div><div class="kda" data-k="kda"></div>
+        <div class="shd">${SHIELD_SVG}<b data-k="sh">0</b></div>
+        <div class="hpn" data-k="hpn"></div><div class="hpb"><i data-k="hpb"></i></div>
+        <div class="ult" data-k="ult"></div>
+        <div class="abs3" data-k="ab"></div>
+        <div class="wp${side === FLIP_SIDE ? " flip" : ""}" data-k="wp"></div>
+        <div class="dinf"><div class="dn" data-k="dn"></div><div class="dk" data-k="dk"></div><div class="dc" data-k="dc"></div></div>
+        <div class="eye">${EYE_SVG}</div>
+        <div class="spikec" data-k="spk"></div>`;
+      const k = { el: c };
+      c.querySelectorAll("[data-k]").forEach((n) => (k[n.dataset.k] = n));
+      el.appendChild(c);
+      out.push(k);
+    }
+    const g = document.createElement("i"); g.className = "glow"; el.prepend(g);
+    const dd = document.createElement("div"); dd.className = "ddead"; el.appendChild(dd);
+    out.ddead = dd; out.box = el;
+    return out;
+  }
+  // tabela econômica: colunas medidas no frame 00:02
+  const COLS = {
+    l: { money: [5, 181], vr: [181, 361, 940], abil: [181, 361], wp: [361, 588], face: 588, name: 673, kda: [760, 905] },
+    r: { kda: [36, 180], name: [180, 268], face: 288, wp: [353, 580], abil: [580, 761], money: [761, 929], vr: [580, 761] },
+  };
+  function buildRows(el, side) {
+    const out = [], C = COLS[side];
+    for (let i = 0; i < 5; i++) {
+      const r = document.createElement("div");
+      r.className = "er";
+      r.style.top = i * 68 + "px";
+      const cell = (k, [a, b], cls = "", inner = "") => `<div class="c ${cls}" data-k="${k}" style="left:${a}px;width:${b - a}px">${inner}</div>`;
+      let h = C.vr.map((x) => `<i class="vr" style="left:${x - 1}px"></i>`).join("");
+      if (side === "l") {
+        h += `<div class="c money" style="left:14px;width:${C.money[1] - 14}px"><span class="mw" data-k="mw" style="transform-origin:0 50%"><span class="sp" data-k="sp"></span><span class="cvw" data-k="cv"></span><span class="cr" data-k="cr"></span></span></div>`;
+        h += `<div class="c" style="left:${C.abil[0] - 1}px;width:${C.abil[1] - C.abil[0]}px;gap:5px"><span class="abl" data-k="ab"></span><span class="ults" data-k="ult"></span></div>`;
+        h += `<div class="c wcell${FLIP_SIDE === "l" ? " flip" : ""}" data-k="wc" style="left:${C.wp[0]}px;width:${C.wp[1] - C.wp[0]}px"></div>`;
+        h += `<div class="face" data-k="face" style="left:${C.face}px"></div>`;
+        h += `<div class="c" style="left:${C.name}px;width:150px"><span class="nm" data-k="nm"></span></div>`;
+        h += `<div class="c" style="left:${C.kda[0]}px;width:${C.kda[1] - C.kda[0]}px;justify-content:flex-end"><span class="kd" data-k="kd"></span></div>`;
+      } else {
+        h += `<div class="c" style="left:${C.kda[0]}px;width:${C.kda[1] - C.kda[0]}px"><span class="kd" data-k="kd"></span></div>`;
+        h += `<div class="c" style="left:${C.name[0]}px;width:${C.name[1] - C.name[0]}px;justify-content:flex-end"><span class="nm" data-k="nm" style="text-align:right"></span></div>`;
+        h += `<div class="face" data-k="face" style="left:${C.face}px"></div>`;
+        h += `<div class="c wcell${FLIP_SIDE === "r" ? " flip" : ""}" data-k="wc" style="left:${C.wp[0]}px;width:${C.wp[1] - C.wp[0]}px"></div>`;
+        h += `<div class="c" style="left:${C.abil[0] + 17}px;width:${C.abil[1] - C.abil[0] - 17}px;gap:6px"><span class="ults" data-k="ult"></span><span class="abl" data-k="ab"></span></div>`;
+        h += `<div class="c money" style="left:${C.money[0]}px;width:${C.money[1] - C.money[0] - 8}px;justify-content:flex-end"><span class="mw" data-k="mw" style="transform-origin:100% 50%"><span class="cr" data-k="cr"></span><span class="cvw" data-k="cv"></span><span class="sp" data-k="sp" style="text-align:left;min-width:66px"></span></span></div>`;
+      }
+      r.innerHTML = h;
+      const k = { el: r };
+      r.querySelectorAll("[data-k]").forEach((n) => (k[n.dataset.k] = n));
+      el.appendChild(r);
+      out.push(k);
+    }
+    return out;
+  }
+  const cards = { l: buildCards($("cards-l"), "l"), r: buildCards($("cards-r"), "r") };
+  const rows = { l: buildRows($("econ-l"), "l"), r: buildRows($("econ-r"), "r") };
+
+  // ---------- peças reutilizáveis ----------
+  const img = (src, cls, alt, fb) => (src ? `<img class="${cls}" src="${esc(src)}" alt="${esc(alt || "")}"${fb ? ` data-fb="${esc(fb)}"` : ""}>` : fb || "");
+  function faceHTML(internal) {
+    const n = agentName(internal);
+    return img(agentImg(internal), "", n, `<div class="ph">${esc(n)}</div>`);
+  }
+  function abilsHTML(internal, ab, known) {
+    return [["grenade", "C"], ["ability1", "Q"], ["ability2", "E"]].map(([slot, key]) => {
+      const n = known ? (ab && ab[slot]) || 0 : 1;
+      const icon = img(agentImg(internal, key), "", key, `<span class="lt">${key}</span>`);
+      return `<div class="ab${n ? "" : " empty"}">${icon}<span class="dots">${known ? "<i></i>".repeat(Math.min(n, 3)) : ""}</span></div>`;
+    }).join("");
+  }
+  function ultHTML(internal, cur, max, ready, side) {
+    const n = Math.max(1, max || 1), r = 16.2, C = 2 * Math.PI * r, gap = n > 1 ? 2.6 : 0, seg = C / n - gap;
+    let arcs = "";
+    for (let i = 0; i < n; i++) arcs += `<circle class="sg${ready || i < cur ? " on" : ""}" cx="20" cy="20" r="${r}" fill="none" stroke-width="2.6" stroke-dasharray="${seg.toFixed(2)} ${(C - seg).toFixed(2)}" stroke-dashoffset="${(-i * C / n - gap / 2 + C / 4).toFixed(2)}"/>`;
+    return `<div class="ultring ${side}${ready ? " ready" : ""}"><svg viewBox="0 0 40 40"><circle class="disk" cx="20" cy="20" r="19"/>${arcs}</svg>${img(agentImg(internal, "X"), "", "X", '<span class="lt">X</span>')}</div>`;
+  }
+  const weaponHTML = (w) => (w ? img(weaponImg(w), "wpi", w, `<span class="wtx">${esc(w === "Knife" ? "" : w)}</span>`) : "");
+  const shieldNum = (a) => ARMOR[a] || 0;
+
+  // ---------- estado ----------
+  const clock = { phase: "", round: -1, at: 0, spikeAt: null };
+  const lastScore = { l: null, r: null };
+  const sideOf = (i) => (i === 0 ? "l" : "r");
+
+  function render(d, now) {
+    if (!d || !Array.isArray(d.teams) || d.teams.length < 2) return;
+    const phase = d.roundPhase || "shopping";
+    if (phase !== clock.phase || d.roundNumber !== clock.round) { clock.phase = phase; clock.round = d.roundNumber; clock.at = now; }
+    const sp = d.spikeState || {};
+    const planted = phase === "combat" && !!(sp.planted && !sp.defused && !sp.detonated);
+    if (planted && clock.spikeAt == null) clock.spikeAt = now;
+    if (!planted) clock.spikeAt = null;
+    stage.classList.toggle("shop", phase === "shopping");
+    stage.classList.toggle("lobby", phase === "LOBBY");
+    // &debug: mostra o que o Spectra está mandando (para achar onde falta dado)
+    if (DEBUG) {
+      const pc = d.teams.map((t) => (t.players || []).length), rr = d.teams.map((t) => (t.roundRecord || []).length);
+      const dbg = $("dbg"); dbg.classList.remove("hidden");
+      dbg.textContent = `fase: ${d.roundPhase ?? "(vazia)"} | rodada: ${d.roundNumber ?? "?"} | jogadores: ${pc[0]} x ${pc[1]} | placar: ${d.teams[0].roundsWon ?? "?"} x ${d.teams[1].roundsWon ?? "?"} | histórico: ${rr[0]}/${rr[1]} | mapa: ${d.map || "?"} | rodando: ${d.isRunning ? "sim" : "não"}`;
+    }
+    overrides(d);
+    SHOW_CREDITS = !!d.showAliveKDA;
+    renderToast(d, phase);
+    renderRoundWin(d, phase);
+    renderPause(d);
+    renderListen(d);
+    updateBrand(d);
+    stage.classList.toggle("l-att", !!(CONFIG.corPorLado && d.teams[0].isAttacking));
+
+    // cronômetro: o servidor não manda o tempo; conta a partir da mudança de fase
+    const D = CONFIG.duracao;
+    let rem = 0;
+    if (phase === "shopping") rem = D.compra - (now - clock.at);
+    else if (phase === "combat") rem = planted ? D.spike - (now - clock.spikeAt) : D.combate - (now - clock.at);
+    const ts = d.timeoutState || {};
+    const paused = !!(ts.techPause || ts.leftTeam || ts.rightTeam);
+    $("bug").classList.toggle("planted", planted);
+    $("bug").classList.toggle("paused", paused);
+    setText($("time"), paused ? (ts.techPause ? L10N.tech : L10N.pause) : phase === "shopping" || phase === "combat" ? fmtTime(rem) : "0:00");
+    fitText($("time"), 150);
+    const otStart = d.firstOtRound || 25, rn = d.roundNumber || 1;
+    setText($("rnd"), rn >= otStart ? L10N.ot + " " + (Math.floor((rn - otStart) / 2) + 1) : L10N.round + rn);
+    // dentro da prévia do capturador: avisa a janela de fora como está a partida, para os números baterem
+    if (window.parent !== window && now - (render._post || -9) > 0.3) {
+      render._post = now;
+      try { window.parent.postMessage({ hud: "vctcn", round: d.roundNumber || 1, phase, sl: d.teams[0].roundsWon || 0, sr: d.teams[1].roundsWon || 0, lAtt: !!d.teams[0].isAttacking, t: Math.max(0, Math.ceil(rem)), paused }, "*"); } catch (e) { /* sem janela de fora */ }
+    }
+
+    const tools = d.tools || {};
+    const series = tools.seriesInfo || {};
+    const [TL, TR] = d.teams;
+    const tri = (t) => t.teamTricode || (t.teamName || "").slice(0, 4).toUpperCase();
+    renderAgentSelect(d, phase, tri);
+
+    // faixa informativa
+    const mi = Array.isArray(series.mapInfo) ? series.mapInfo : [];
+    const fut = mi.filter((m) => m && m.type === "future" && m.map);
+    const logoOf = (m) => (m && m.logo) || (m && m.left && m.left.logo) || "";
+    const items = [[L10N.cur, mapLabel(d.map), ""]];
+    if (fut.length > 1) items.push([L10N.next, mapLabel(fut[0].map), logoOf(fut[0])]);
+    if (fut.length) items.push([L10N.dec, mapLabel(fut[fut.length - 1].map), ""]);
+    setHTML($("info-l"), items.map(([k, v, lg]) => `<span class="it">${esc(k)}: ${esc(v)}${lg ? `<img src="${esc(lg)}" alt="">` : ""}</span>`).join(""));
+    setText($("info-r"), CONFIG.fase || (tools.tournamentInfo && tools.tournamentInfo.name) || "");
+
+    // placar e times
+    const need = series.needed >= 1 ? Math.min(4, series.needed) : 0;
+    const duelOn = trackDuel(d, phase);
+    [[TL, 0], [TR, 1]].forEach(([t, i]) => {
+      const s = sideOf(i);
+      const tn = $("tn-" + s); setText(tn, tri(t)); fitText(tn, 88);
+      const sc = String(t.roundsWon ?? 0), scEl = $("sc-" + s);
+      setText(scEl, sc);
+      if (lastScore[s] !== null && lastScore[s] !== sc) { scEl.classList.remove("bump"); void scEl.offsetWidth; scEl.classList.add("bump"); }
+      lastScore[s] = sc;
+      const logo = t.teamUrl || A(`Logos/logo${i + 1}.png`);
+      setSrc($("logo-" + s), logo);
+      const won = i ? series.wonRight || 0 : series.wonLeft || 0;
+      const pg = $("pips-" + s); const ph = pipsSVG(s, need, won); if (pg._k !== ph) { pg._k = ph; pg.innerHTML = ph; }
+
+      renderCards(cards[s], t, s, phase, duelOn ? DUEL.idx[i] : -1);
+      renderRows(rows[s], t, s);
+
+      // cabeçalho da compra
+      const pn = $("pn-" + s); setText(pn, tri(t)); fitText(pn, 220);
+      const eq = (t.players || []).reduce((a, p) => a + (COST[p.highestWeapon] || 0) + (COST[p.armorName] || 0), 0);
+      setText($("pv-" + s), money(eq));
+      setHTML($("cv-" + s), CREDIT);
+      setText($("mn-" + s), tri(t)); setText($("ms-" + s), sc);
+      const toc = tools.timeoutCounter;
+      if (toc) setHTML($("tac-" + s), Array.from({ length: toc.max || 0 }, (_, n) => `<i class="${n < (i ? toc.right : toc.left) ? "on" : ""}"></i>`).join(""));
+      // arte do cabeçalho: Logos/skinN.png (arma do time) se existir, senão o logo
+      const art = $("art-" + s);
+      if (art._init && art.classList.contains("wm") && art.getAttribute("src") !== logo) art.src = logo;
+      if (!art._init) {
+        art._init = true;
+        art.onerror = () => { art.onerror = () => (art.style.visibility = "hidden"); art.className = "art wm"; art.style.visibility = ""; art.src = logo; };
+        art.src = A(`Logos/skin${i + 1}.png`);
+      }
+    });
+    const seed = (tools.seedingInfo) || {};
+    setText($("seed-l"), (seed.left || "").toUpperCase()); setText($("seed-r"), (seed.right || "").toUpperCase());
+    renderHistory(d, TL, TR);
+    renderStats(d, TL, TR, tri);
+    renderCam(d, phase);
+  }
+
+  let OVR = { raw: null, map: new Map() };
+  function overrides(d) {
+    const raw = d.tools && d.tools.nameOverrides && d.tools.nameOverrides.overrides;
+    if (raw === OVR.raw) return OVR.map;
+    let m = new Map();
+    try { const arr = typeof raw === "string" ? JSON.parse(raw) : raw; if (Array.isArray(arr)) m = new Map(arr.filter((x) => Array.isArray(x) && x.length >= 2)); } catch (e) { /* formato desconhecido */ }
+    OVR = { raw, map: m };
+    return m;
+  }
+  const shownName = (p) => OVR.map.get(p.fullName) || OVR.map.get(p.name) || p.name || p.fullName || "";
+  let SHOW_CREDITS = false;
+
+  // ---------- seleção de agentes ----------
+  // Aparece sozinha na fase LOBBY do Spectra (quando os jogadores já chegaram) e sai quando a compra começa.
+  // funções dos agentes (mesma tabela do nobii) — ícones em Resources/Funcoes
+  const ROLE = {};
+  [["Duelista", "Jett Reyna Phoenix Raze Yoru Neon Iso Waylay"], ["Iniciador", "Sova Breach Skye KAY/O Fade Gekko Tejo"],
+   ["Controlador", "Brimstone Viper Omen Astra Harbor Clove Miks"], ["Sentinela", "Sage Cypher Killjoy Chamber Deadlock Vyse Veto"]]
+    .forEach(([r, s]) => s.split(" ").forEach((n) => (ROLE[n] = r)));
+  function buildAsel(el, side) {
+    const out = [];
+    for (let i = 0; i < 5; i++) {
+      const c = document.createElement("div");
+      c.className = "asc"; c.style.setProperty("--i", side === "l" ? 4 - i : i); // entra a partir do centro
+      c.innerHTML = `<i class="bg"></i><div class="none">?</div><img class="ag" alt=""><i class="shade"></i><i class="flash"></i><div class="role"></div><div class="nm"></div>`;
+      el.appendChild(c);
+      out.push({ el: c, ag: c.querySelector(".ag"), none: c.querySelector(".none"), role: c.querySelector(".role"), nm: c.querySelector(".nm"), agent: null, locked: false });
+    }
+    return out;
+  }
+  const ASEL = { l: buildAsel($("as-l"), "l"), r: buildAsel($("as-r"), "r"), flag: null };
+  ASEL.r.forEach((k) => {}); // mesma ordem do jogo: jogador 1 à esquerda em cada lado
+  function renderAgentSelect(d, phase, tri) {
+    const has = d.teams.some((t) => (t.players || []).length);
+    const on = CONFIG.selecaoAgentes !== false && phase === "LOBBY" && has;
+    $("asel").classList.toggle("on", on);
+    stage.classList.toggle("asel-on", on);
+    if (!on) return;
+    // logo do topo: Resources/Logos/looking.png, senão o logo do torneio do Spectra, senão o texto
+    const tl = (d.tools && d.tools.tournamentInfo && d.tools.tournamentInfo.logoUrl) || "";
+    if (ASEL.flag !== tl) {
+      ASEL.flag = tl;
+      const f = $("as-flag"), im = new Image();
+      im.onload = () => { f.innerHTML = ""; f.appendChild(im); };
+      im.onerror = () => { if (tl && im.src !== tl) im.src = tl; };
+      im.src = A("Logos/looking.png");
+    }
+    setText($("as-map"), mapLabel(d.map) || "");
+    d.teams.forEach((t, i) => {
+      const s = sideOf(i);
+      const tn = $("as-t" + s); setText(tn, tri(t)); fitText(tn, 128);
+      setText($("as-s" + s), "[" + (t.isAttacking ? L10N.atk : L10N.dfs) + "]");
+      const ps = (t.players || []).slice(0, 5);
+      ASEL[s].forEach((k, j) => {
+        const p = ps[j];
+        k.el.classList.toggle("hidden", !p); if (!p) return;
+        setText(k.nm, shownName(p));
+        const name = p.agentInternal ? agentName(p.agentInternal) : "";
+        if (name !== k.agent) {
+          k.agent = name;
+          // retrato de busto (Agentes/<nome>/retrato.png); se não existir, usa o rosto normal
+          const bust = agentImg(p.agentInternal, "retrato"), face = agentImg(p.agentInternal);
+          if (name) { k.ag.style.visibility = ""; k.ag.src = bust; k.ag.classList.remove("sw"); void k.ag.offsetWidth; k.ag.classList.add("sw"); }
+          else { k.ag.style.visibility = "hidden"; k.ag.removeAttribute("src"); }
+          k.ag.onerror = () => { if (face && !k.ag.src.endsWith(encodeURI(face.split("/").pop()))) k.ag.src = face; else k.ag.style.visibility = "hidden"; };
+          k.role.innerHTML = ROLE[name] ? `<img src="${A("Funcoes/" + ROLE[name] + ".webp")}" alt="">` : "";
+          k.none.style.display = name ? "none" : "";
+        }
+        const locked = !!p.locked && !!name;
+        k.el.classList.toggle("hov", !!name && !locked);
+        if (locked && !k.locked) { k.el.classList.remove("lockfx"); void k.el.offsetWidth; k.el.classList.add("lockfx"); }
+        k.locked = locked;
+      });
+    });
+  }
+
+  // ---------- comunicação ao vivo (listen-in) ----------
+  // Usa as câmeras dos jogadores do Spectra: cada jogador transmite câmera + microfone no VDO.Ninja
+  // (sala = playercamsInfo.identifier, nome = Nome_H_Tag). O time ouvido vem do Spectra Client
+  // (playercamsInfo.listenIn = "left" | "right"); ?ouvir=l|r força pelo link.
+  const SPEAK_LIMIT = 10, SPEAK_HOLD = 400;
+  const PLAY_SVG = '<svg viewBox="0 0 16 16"><path d="M3 2l11 6-11 6z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg>';
+  const LI = { side: null, room: "", tiles: [], timer: null, outT: null };
+  const liUrl = (room, full) => { const [n, t] = String(full || "").split("#"); return `https://vdo.ninja/?room=${encodeURIComponent(room)}&view=${encodeURIComponent((n || "").replaceAll(" ", "_") + "_H_" + (t || ""))}&scene=0&cleanoutput&vb=5000&transparent&waitmessage=&disablehotkeys&codec=h265,av1,h264,vp8&getloudness`; };
+  addEventListener("message", (e) => {
+    const k = LI.tiles.find((x) => x.frame && x.frame.contentWindow === e.source); if (!k) return;
+    const m = e.data; if (!m || typeof m !== "object") return;
+    if (m.action === "view-connection") { k.ok = m.value === true; liReveal(); }
+    if (m.action === "loudness" && m.loudness) {
+      const v = Math.max(0, ...Object.values(m.loudness).map(Number));
+      if (v > SPEAK_LIMIT) { k.el.classList.add("talk"); clearTimeout(k.t); k.t = setTimeout(() => k.el.classList.remove("talk"), SPEAK_HOLD); }
+    }
+  });
+  function liReveal() {
+    const el = $("li");
+    if (!LI.side || el.classList.contains("on")) return;
+    // como no nobii: espera os 5 conectarem; se algum demorar, mostra mesmo assim depois de 5 s
+    if (LI.tiles.every((k) => k.ok) || Date.now() - LI.at > 5000) { el.classList.remove("out"); void el.offsetWidth; el.classList.add("on"); }
+  }
+  function renderListen(d) {
+    const pc = (d.tools && d.tools.playercamsInfo) || {};
+    const force = String(window.HUD_OUVIR ?? params.get("ouvir") ?? "").toLowerCase();
+    let want = force === "l" || force === "left" ? "left" : force === "r" || force === "right" ? "right" : pc.listenIn || false;
+    if (CONFIG.listenIn === false) want = false;
+    const el = $("li");
+    if (!want) {
+      if (LI.side) {
+        LI.side = null; el.classList.remove("on"); el.classList.add("out");
+        clearTimeout(LI.outT); LI.outT = setTimeout(() => { if (!LI.side) { el.classList.remove("out"); $("li-body").innerHTML = ""; LI.tiles = []; } }, 900);
+      }
+      return;
+    }
+    const ti = want === "left" ? 0 : 1, T = d.teams[ti] || {}, room = pc.identifier || "";
+    const ps = (T.players || []).slice(0, 5);
+    const key = want + "|" + room + "|" + ps.map((p) => p.fullName || p.name).join();
+    el.classList.toggle("t-l", sideOf(ti) === "l"); el.classList.toggle("t-r", sideOf(ti) === "r");
+    setSrc($("li-logo"), T.teamUrl || A(`Logos/logo${ti + 1}.png`));
+    if (LI.key !== key) {
+      LI.key = key; LI.side = want; LI.at = Date.now(); clearTimeout(LI.outT);
+      const body = $("li-body"); body.innerHTML = "";
+      LI.tiles = ps.map((p, i) => {
+        const t = document.createElement("div"); t.className = "tile"; t.style.setProperty("--i", i);
+        t.innerHTML = `${img(agentImg(p.agentInternal, "retrato"), "ph", "")}${room && p.fullName ? `<iframe allow="camera;fullscreen;autoplay" src="${esc(liUrl(room, p.fullName))}"></iframe>` : ""}<i class="sh"></i><div class="nm">${esc(shownName(p))}</div><div class="spk">${PLAY_SVG}</div><i class="ring"></i>`;
+        body.appendChild(t);
+        return { el: t, frame: t.querySelector("iframe"), ok: !room || !p.fullName, t: null };
+      });
+      clearInterval(LI.timer); LI.timer = setInterval(() => { liReveal(); if (el.classList.contains("on")) clearInterval(LI.timer); }, 500);
+      liReveal();
+    }
+    LI.tiles.forEach((k, i) => { const p = ps[i]; if (p) setText(k.el.querySelector(".nm"), shownName(p)); });
+    // prévia: sem câmeras, acende quem "fala" de vez em quando
+    if (MODE === "demo" && !room && !LI.fake) LI.fake = setInterval(() => { const k = LI.tiles[Math.floor(Math.random() * LI.tiles.length)]; if (!k) return; k.el.classList.add("talk"); clearTimeout(k.t); k.t = setTimeout(() => k.el.classList.remove("talk"), 600 + Math.random() * 900); }, 700);
+  }
+  // 1x1 (mesma regra do nobii): liga quando sobra 1 vivo de cada lado e só desliga
+  // quando um time volta a ter 2+ vivos (nova rodada). Guarda quem eram os dois.
+  const DUEL = { on: false, idx: [-1, -1] };
+  function trackDuel(d, phase) {
+    const alive = d.teams.map((t) => (t.players || []).slice(0, 5).filter((p) => p.isAlive).length);
+    if (alive[0] === 1 && alive[1] === 1) { DUEL.on = true; DUEL.idx = d.teams.map((t) => (t.players || []).slice(0, 5).findIndex((p) => p.isAlive)); }
+    if (DUEL.on && (alive[0] >= 2 || alive[1] >= 2)) DUEL.on = false;
+    const show = CONFIG.destaque1x1 !== false && DUEL.on && (phase === "combat" || phase === "end");
+    $("duel").classList.toggle("on", show);
+    if (show) d.teams.forEach((t, i) => { const p = (t.players || [])[DUEL.idx[i]]; setText($("duel-" + sideOf(i)), p ? shownName(p) : ""); });
+    return show;
+  }
+  function renderCards(list, team, s, phase, duelIdx) {
+    const ps = (team.players || []).slice(0, 5);
+    const duel = duelIdx >= 0;
+    list.box.classList.toggle("duel", duel);
+    const dk = duel ? ps.map((p, i) => (i !== duelIdx && !p.isAlive ? p.agentInternal : "")).filter(Boolean).join() : "";
+    if (list.ddead._k !== dk) { list.ddead._k = dk; list.ddead.innerHTML = dk ? dk.split(",").map((a) => `<div class="di">${faceHTML(a)}</div>`).join("") : ""; }
+    list.forEach((k, i) => {
+      const p = ps[i];
+      const out = duel && i !== duelIdx, mv = duel && i === duelIdx ? `translateY(${-i * 100}px)` : "";
+      k.el.classList.toggle("out", out);
+      if (k.el.style.transform !== mv) k.el.style.transform = mv;
+      k.el.classList.toggle("hidden", !p); if (!p) return;
+      const dead = !p.isAlive;
+      k.el.classList.toggle("dead", dead);
+      k.el.classList.toggle("obs", !!p.isObserved && !dead);
+      k.el.classList.toggle("spike", !!p.hasSpike && !dead);
+      setHTML(k.face, faceHTML(p.agentInternal), "f" + p.agentInternal);
+      const nm = shownName(p);
+      setText(k.name, nm); setText(k.dn, nm);
+      const kda = `${p.kills ?? 0}/${p.deaths ?? 0}/${p.assists ?? 0}`;
+      // atalho "Trocar K/D/A e créditos" do capturador: o canto do cartão vivo alterna entre os dois
+      if (SHOW_CREDITS) setHTML(k.kda, `${CREDIT}<span>${money(p.money)}</span>`, "c" + p.money); else setHTML(k.kda, esc(kda), "k" + kda); setText(k.dk, kda);
+      setHTML(k.dc, s === "l" ? `${CREDIT}<span>${money(p.money)}</span>` : `${CREDIT}<span>${money(p.money)}</span>`, "c" + p.money);
+      setText(k.sh, shieldNum(p.armorName));
+      const hasHp = !p.auxiliaryAvailable || p.auxiliaryAvailable.health !== false;
+      const hp = dead ? 0 : hasHp ? Math.max(0, Math.min(100, p.health ?? 100)) : 100;
+      setText(k.hpn, hp);
+      const tf = `scaleX(${(hp / 100).toFixed(3)})`; if (k.hpb.style.transform !== tf) k.hpb.style.transform = tf;
+      const ab = p.abilities || {};
+      const known = !p.auxiliaryAvailable || p.auxiliaryAvailable.abilities !== false;
+      setHTML(k.ab, abilsHTML(p.agentInternal, ab, known), [p.agentInternal, known, ab.grenade, ab.ability1, ab.ability2].join());
+      setHTML(k.ult, ultHTML(p.agentInternal, p.currUltPoints || 0, p.maxUltPoints || 0, !!p.ultReady, s), [p.agentInternal, p.currUltPoints, p.maxUltPoints, p.ultReady].join());
+      setHTML(k.wp, weaponHTML(p.highestWeapon), "w" + p.highestWeapon);
+      setHTML(k.spk, SPIKE_HTML);
+    });
+  }
+
+  function renderRows(list, team, s) {
+    const ps = (team.players || []).slice(0, 5);
+    list.forEach((k, i) => {
+      const p = ps[i];
+      k.el.classList.toggle("hidden", !p); if (!p) return;
+      setText(k.sp, "-" + money(p.moneySpent || 0));
+      setHTML(k.cv, CREDIT);
+      setText(k.cr, money(p.money));
+      fitText(k.mw, s === "l" ? 166 : 160);
+      const ab = p.abilities || {};
+      const known = !p.auxiliaryAvailable || p.auxiliaryAvailable.abilities !== false;
+      setHTML(k.ab, abilsHTML(p.agentInternal, ab, known), [p.agentInternal, known, ab.grenade, ab.ability1, ab.ability2].join());
+      setHTML(k.ult, ultHTML(p.agentInternal, p.currUltPoints || 0, p.maxUltPoints || 0, !!p.ultReady, s), [p.agentInternal, p.currUltPoints, p.maxUltPoints, p.ultReady].join());
+      const sh = SHIELD_IMG[p.armorName] ? img(A("Escudos/" + SHIELD_IMG[p.armorName]), "shi", p.armorName, `<span class="wtx">${shieldNum(p.armorName)}</span>`) : "";
+      // esquerda: [escudo] arma; direita: arma [escudo] — como no frame 00:02
+      // centros medidos no frame 00:02 — esquerda: escudo x 388, arma x 446; direita: arma x 496, escudo x 554 (relativos à tabela)
+      const wx = s === "l" ? 446 - 361 : 496 - 353, sx = s === "l" ? 388 - 361 : 554 - 353;
+      setHTML(k.wc, `<span class="ws" style="left:${wx - 60}px">${weaponHTML(p.highestWeapon)}</span><span class="ss" style="left:${sx - 15}px">${sh}</span>`, [p.highestWeapon, p.armorName].join());
+      setHTML(k.face, faceHTML(p.agentInternal), "f" + p.agentInternal);
+      setText(k.nm, shownName(p));
+      setHTML(k.kd, `${p.kills ?? 0}<i>/</i>${p.deaths ?? 0}<i>/</i>${p.assists ?? 0}`, [p.kills, p.deaths, p.assists].join());
+    });
+  }
+
+  // indicadores de rodada (referências da fase de compra):
+  //  - até a rodada 12: 01–12 em uma linha, a atual entre setas, depois o ícone de troca de lado e um ponto;
+  //  - depois: as últimas rodadas jogadas em duas linhas + a atual, com o ícone de troca entre a 12 e a 13.
+  function renderHistory(d, TL, TR) {
+    const cur = d.roundNumber || 1, sw = d.switchRound || 13;
+    const recL = {}, recR = {};
+    (TL.roundRecord || []).forEach((r) => (recL[r.round] = r));
+    (TR.roundRecord || []).forEach((r) => (recR[r.round] = r));
+    const key = [cur, sw, JSON.stringify(TL.roundRecord || []), JSON.stringify(TR.roundRecord || [])].join("|");
+    const h = $("hist");
+    if (h._k === key) return;
+    h._k = key;
+    const ot = d.firstOtRound || 25;
+    let cols = [];
+    if (cur >= ot) {
+      // prorrogação: os times trocam de lado a cada rodada até alguém abrir 2 de vantagem
+      for (let n = Math.max(ot, cur - 12); n <= cur; n++) cols.push(n);
+      cols.unshift("ot");
+    } else if (cur < sw) {
+      for (let n = 1; n < sw && cols.length < 12; n++) cols.push(n);
+      cols.push("swap", "dot");
+    } else {
+      cols = [cur];
+      // da atual para trás até completar 14 colunas; o ícone de troca fica entre a 12 e a 13
+      for (let n = cur - 1; n >= 1 && cols.length < 14; n--) {
+        if (n === sw - 1) { if (cols.length > 12) break; cols.unshift("swap"); }
+        cols.unshift(n);
+      }
+    }
+    const nn = (n) => String(n).padStart(2, "0");
+    let html = "";
+    cols.forEach((c, j) => {
+      const x = j * 51;
+      if (c === "swap") { html += `<div class="sw" style="left:${x}px"><i class="a"></i><i class="z"></i></div>`; return; }
+      if (c === "ot") { html += `<div class="hn otl" style="left:${x}px">${L10N.otShort}</div>`; return; }
+      if (c === "dot") { html += `<i class="dot" style="left:${x + 22}px"></i>`; return; }
+      if (c === cur) { html += `<div class="hn" style="left:${x}px">${nn(c)}</div><i class="mk t" style="left:${x + 19}px"></i><i class="mk b" style="left:${x + 19}px"></i>`; return; }
+      if (c > cur) { html += `<div class="hn" style="left:${x}px">${nn(c)}</div>`; return; }
+      const rl = recL[c], rr = recR[c];
+      const winL = !!(rl && WIN_TYPES[rl.type]), winR = !!(rr && WIN_TYPES[rr.type]);
+      if (!winL && !winR) { html += `<div class="hn old" style="left:${x}px">${nn(c)}</div>`; return; }
+      const rec = winL ? rl : rr, side = rec.wasAttack ? "att" : "def", icon = REASON_SVG[rec.type] || REASON_SVG.kills;
+      const win = `<div class="hc ${winL ? "t" : "b"} ${side}" style="left:${x}px" title="${esc(rec.type)}">${icon}</div>`;
+      const num = `<div class="hc ${winL ? "b" : "t"}" style="left:${x}px">${nn(c)}</div>`;
+      html += win + num;
+    });
+    h.innerHTML = html;
+  }
+
+  // ---------- quadro de vitória da rodada (mesma lógica do front do Spectra/nobii) ----------
+  // clutch: o time ficou com 1 vivo contra 2 ou mais em algum momento da rodada
+  const RW = { clutch: [0, 0], shown: -1, load: [0, 0], loadRound: -1, timer: null, armed: false };
+  const RW_ART = { normal: "normal", ace: "ace", clutch: "clutch", flawless: "flawless", thrifty: "economico", teamAce: "normal" };
+  const loadOf = (t) => (t.players || []).reduce((a, p) => a + (COST[p.highestWeapon] || 0) + (COST[p.armorName] || 0), 0);
+  function trackRound(d, phase) {
+    const [A, B] = d.teams, alive = (t) => (t.players || []).filter((p) => p.isAlive).length;
+    if (phase === "shopping") RW.clutch = [0, 0];
+    if (phase === "combat") {
+      const a = alive(A), b = alive(B);
+      if (a === 1 && b >= 2) RW.clutch[0] = 1;
+      if (b === 1 && a >= 2) RW.clutch[1] = 1;
+      if (RW.loadRound !== d.roundNumber) { RW.loadRound = d.roundNumber; RW.load = [loadOf(A), loadOf(B)]; }
+    }
+  }
+  function ceremony(d, won) {
+    const W = d.teams[won], Lt = d.teams[1 - won];
+    const lostNames = new Set((Lt.players || []).map((p) => p.name));
+    let ace = false, flawless = !(Lt.players || []).some((p) => p.isAlive), teamAce = (W.players || []).length > 0;
+    for (const p of W.players || []) {
+      const k = new Set((p.killedPlayerNames || []).filter((n) => lostNames.has(n)));
+      if (k.size >= 5) ace = true;
+      if ((p.deathsThisRound || 0) >= 1 || !p.isAlive) flawless = false;
+      if (!((p.killsThisRound || 0) >= 1)) teamAce = false;
+    }
+    // econômico: venceu com equipamento bem mais barato que o do adversário
+    const thrifty = RW.loadRound === d.roundNumber && RW.load[1 - won] >= 8000 && RW.load[won] <= RW.load[1 - won] * 0.6;
+    if (ace) return "ace";
+    if (RW.clutch[won]) return "clutch";
+    if (teamAce) return "teamAce";
+    if (flawless) return "flawless";
+    if (thrifty) return "thrifty";
+    return "normal";
+  }
+  function renderRoundWin(d, phase) {
+    if (!CONFIG.quadroVitoria) return;
+    trackRound(d, phase);
+    const el = $("rwin");
+    if (phase !== "end") { if (phase !== RW.lastPhase) { RW.armed = true; } RW.lastPhase = phase; return; }
+    RW.lastPhase = phase;
+    // só mostra se viu a rodada acontecer (não dispara ao abrir a HUD no meio do fim de rodada)
+    if (d.roundNumber === RW.shown || !RW.armed) return;
+    RW.shown = d.roundNumber; RW.armed = false;
+    const won = d.attackersWon ? (d.teams[0].isAttacking ? 0 : 1) : (d.teams[0].isAttacking ? 1 : 0);
+    const kind = ceremony(d, won), T = d.teams[won];
+    $("rwin-bg").src = A(`RoundWin/${RW_ART[kind] || "normal"}.png`);
+    setText($("rwin-r"), `ROUND ${d.roundNumber}`);
+    const t = $("rwin-t"); t.innerHTML = `<span>${accHTML(OVR.map.get(T.teamName) || T.teamName || T.teamTricode || "", true)}</span>`;
+    const sp = t.firstChild; sp.style.transform = ""; const w = sp.scrollWidth; if (w > 600) sp.style.transform = `scaleX(${(600 / w).toFixed(3)})`;
+    clearTimeout(RW.timer);
+    el.classList.remove("on"); void el.offsetWidth; el.classList.add("on");
+    RW.timer = setTimeout(() => el.classList.remove("on"), CONFIG.quadroVitoriaSeg * 1000);
+  }
+
+  // letras acentuadas: a fonte só tem A–Z sem acento; desenha o acento por cima da letra base,
+  // assim tudo fica do mesmo tamanho (sem a fonte de reserva do Windows aparecer maior)
+  const ACC = { "Á": "A ac", "À": "A gr", "Â": "A ci", "Ã": "A ti", "É": "E ac", "Ê": "E ci", "Í": "I ac", "Ó": "O ac", "Ô": "O ci", "Õ": "O ti", "Ú": "U ac", "Ç": "C ce",
+    "á": "a ac lw", "à": "a gr lw", "â": "a ci lw", "ã": "a ti lw", "é": "e ac lw", "ê": "e ci lw", "í": "ı ac lw", "ó": "o ac lw", "ô": "o ci lw", "õ": "o ti lw", "ú": "u ac lw", "ç": "c ce" };
+  const accHTML = (t, upper) => { t = String(t ?? ""); if (upper) t = t.toUpperCase(); return esc(t).replace(/[ÁÀÂÃÉÊÍÓÔÕÚÇáàâãéêíóôõúç]/g, (c) => { const [b, ...k] = ACC[c].split(" "); return `<span class="acc ${k.join(" ")}">${b === "ı" ? "i" : b}</span>`; }); };
+
+  // ---------- tela de pausa (como a do front do nobii, com as texturas e cores desta HUD) ----------
+  function renderPause(d) {
+    const ts = d.timeoutState || {}, el = $("pause");
+    const on = !!(ts.techPause || ts.leftTeam || ts.rightTeam);
+    el.classList.toggle("on", on);
+    if (!on) return; // ao sair, mantém o conteúdo para a animação de saída
+    const tech = !!ts.techPause && !ts.leftTeam && !ts.rightTeam;
+    el.classList.toggle("tech", tech);
+    el.classList.toggle("t-l", !tech && !!ts.leftTeam);
+    el.classList.toggle("t-r", !tech && !ts.leftTeam && !!ts.rightTeam);
+    setText($("pz-wm"), "PAUSA");
+    if (tech) setHTML($("pz-t"), `<span>${accHTML(L10N.tech, true)}</span>`);
+    else {
+      const i = ts.leftTeam ? 0 : 1, T = d.teams[i];
+      setHTML($("pz-t"), `<span>${accHTML(L10N.tac, true)} · ${accHTML(T.teamTricode || T.teamName || "", true)}</span>`);
+      const sp = $("pz-t").firstChild; if (sp) { sp.style.transform = ""; if (sp.scrollWidth > 590) sp.style.transform = `scaleX(${(590 / sp.scrollWidth).toFixed(3)})`; }
+      setText($("pz-side"), T.isAttacking ? "ATAQUE" : "DEFESA");
+      setSrc($("pz-logo"), T.teamUrl || A(`Logos/logo${i + 1}.png`));
+      setHTML($("pz-tri"), accHTML(OVR.map.get(T.teamName) || T.teamName || T.teamTricode || "", true));
+    }
+    const dur = Number(d.tools && d.tools.timeoutDuration) || 60, rem = Math.max(0, Math.round(Number(ts.timeRemaining) || 0));
+    el.classList.toggle("notimer", !rem);
+    if (rem) { $("pz-bar").style.width = Math.min(100, (rem / dur) * 100).toFixed(1) + "%"; setText($("pz-s"), fmtTime(rem)); }
+  }
+
+  // mensagem na tela (toastInfo do capturador); como no Spectra, só aparece na compra
+  function renderToast(d, phase) {
+    const ti = d.toastInfo || {}, el = $("toast");
+    const on = !!ti.active && phase === "shopping" && !!(ti.title || ti.message);
+    el.classList.toggle("on", on);
+    if (!on) return;
+    setHTML($("toast-t"), accHTML(ti.title || "", true)); setText($("toast-m"), ti.message || "");
+    const sel = ti.selectedTeam === "left" ? 0 : ti.selectedTeam === "right" ? 1 : -1;
+    el.classList.toggle("t-l", sel === 0); el.classList.toggle("t-r", sel === 1);
+    const tinfo = (d.tools && d.tools.tournamentInfo) || {};
+    const logo = sel >= 0 ? (d.teams[sel].teamUrl || A(`Logos/logo${sel + 1}.png`)) : ti.eventLogoEnabled ? (tinfo.logoUrl || "") : "";
+    const img = $("toast-logo"); img.hidden = !logo; if (logo) setSrc(img, logo);
+  }
+
+  // painel de estatísticas (alterna com a publicidade na compra)
+  function renderStats(d, TL, TR, tri) {
+    const rate = (t) => {
+      const side = !!t.isAttacking;
+      const recs = (t.roundRecord || []).filter((r) => r && !!r.wasAttack === side && (WIN_TYPES[r.type] || r.type === "lost"));
+      const w = recs.filter((r) => WIN_TYPES[r.type]).length;
+      return { side, txt: recs.length ? Math.round((w / recs.length) * 100) : null };
+    };
+    [[TL, "l", 0], [TR, "r", 1]].forEach(([t, s, i]) => {
+      const r = rate(t);
+      setText($("st-k-" + s), r.side ? L10N.att : L10N.def);
+      setHTML($("st-v-" + s), r.txt == null ? "--<small>%</small>" : `${r.txt}<small>%</small>`);
+      setSrc($("st-logo-" + s), t.teamUrl || A(`Logos/logo${i + 1}.png`));
+    });
+    setText($("st-t"), L10N.rate);
+    setText($("st-m"), mapLabel(d.map));
+    const art = d.map ? `url("${A("Maps/" + mapName(d.map) + ".png")}")` : "none";
+    const mid = $("st-mid"); if (mid._k !== art) { mid._k = art; mid.style.backgroundImage = art; }
+  }
+
+  function renderCam(d, phase) {
+    const cam = $("cam");
+    let who = null, wi = 0;
+    d.teams.forEach((t, i) => (t.players || []).forEach((p) => { if (p.isObserved && p.isAlive) { who = p; wi = i; } }));
+    const on = CONFIG.camera && phase === "combat" && !!who && !LI.side; // com a comunicação ao vivo na tela, a câmera sai
+    cam.classList.toggle("hidden", !on);
+    if (!on) return;
+    cam.classList.toggle("l", wi === 0); cam.classList.toggle("r", wi === 1);
+    setText($("cam-n"), shownName(who));
+    setText($("cam-kda"), `${who.kills ?? 0}/${who.deaths ?? 0}/${who.assists ?? 0}`);
+    const k = who.killsThisRound || 0;
+    $("cam-k").classList.toggle("on", k > 0);
+    setText($("cam-kn"), k);
+  }
+
+  // ---------- publicidade e patrocínio ----------
+  const probe = (src, ms = 2500) => new Promise((ok) => { const im = new Image(); const t = setTimeout(() => ok(false), ms); im.onload = () => { clearTimeout(t); ok(true); }; im.onerror = () => { clearTimeout(t); ok(false); }; im.src = src; });
+  async function listImages(prefix, max = 12) { const out = []; for (let i = 1; i <= max; i++) { const s = A(`${prefix}${i}.png`); if (await probe(s, 1500)) out.push(s); else break; } return out; }
+  function rotate(imgA, imgB, list, secs) {
+    imgA.style.opacity = "0"; imgB.style.opacity = "0";
+    if (!list.length) { imgA.removeAttribute("src"); imgB.removeAttribute("src"); return null; }
+    let n = 0, front = imgA, back = imgB;
+    front.src = list[0]; front.style.opacity = "1";
+    if (list.length < 2) return null;
+    return setInterval(() => {
+      n = (n + 1) % list.length;
+      back.src = list[n];
+      back.style.opacity = "1"; front.style.opacity = "0";
+      [front, back] = [back, front];
+    }, secs * 1000);
+  }
+  // bloco do evento (canto superior direito): patrocinadores ligados no Spectra Client;
+  // sem eles, o logo do torneio do Client. As artes da pasta Resources/Sponsors só entram na prévia
+  // (ou com patrocinadoresLocais: true). Atualiza sozinho quando o Client manda outra lista.
+  let brandKey = null, brandTimer = null, brandBusy = false;
+  async function updateBrand(d) {
+    const tools = (d && d.tools) || {}, si = tools.sponsorInfo || {};
+    const remote = si.enabled && Array.isArray(si.sponsors) ? si.sponsors.filter(Boolean) : [];
+    const tlogo = (tools.tournamentInfo && tools.tournamentInfo.logoUrl) || "";
+    const key = JSON.stringify([remote, si.duration, tlogo]);
+    if (key === brandKey || brandBusy) return;
+    brandBusy = true; brandKey = key;
+    let list = remote;
+    if (!list.length && tlogo) list = [tlogo];
+    if (!list.length && (MODE !== "live" || CONFIG.patrocinadoresLocais)) list = await listImages("Sponsors/Sponsor");
+    const dur = Number(si.duration) || 0; // o Spectra manda em milissegundos (ex.: 5000)
+    clearInterval(brandTimer);
+    brandTimer = rotate($("brand-a"), $("brand-b"), list, dur ? (dur > 100 ? dur / 1000 : dur) : CONFIG.trocaPatrocinio);
+    brandBusy = false;
+  }
+  async function startMedia(d0) {
+    updateBrand(d0);
+    // faixa da compra: Logos/bannerN.png, alternando com o painel de estatísticas
+    const banners = CONFIG.faixaPublicidade ? await listImages("Logos/banner", 6) : [];
+    const ad = $("ad"), st = $("stat"), adImg = $("ad-img");
+    let showAd = banners.length > 0, bi = 0;
+    if (banners.length) adImg.src = banners[0];
+    const apply = () => { ad.style.opacity = showAd ? "1" : "0"; st.style.opacity = showAd ? "0" : "1"; };
+    apply();
+    setInterval(() => {
+      if (!stage.classList.contains("shop")) return;
+      if (!banners.length) { showAd = false; apply(); return; }
+      showAd = !showAd;
+      if (showAd) { bi = (bi + 1) % banners.length; adImg.src = banners[bi]; }
+      apply();
+    }, CONFIG.trocaPublicidade * 1000);
+  }
+
+  // ---------- fontes e imagens fixas da pasta Resources ----------
+  async function loadResources() {
+    const fonts = [["HUDGridnik", "FoundryGridnik-Regular.otf", "400"], ["HUDGridnik", "FoundryGridnik-Bold.otf", "700"], ["HUDGridnik", "FoundryGridnik-ExtraBold.otf", "800"], ["HUDTungsten", "Tungsten-Bold.ttf", "400"]];
+    await Promise.all(fonts.map(async ([fam, file, w]) => { try { const f = new FontFace(fam, `url("${A(file)}")`, { weight: w, unicodeRange: "U+0020-007E, U+00B7, U+2013-2014, U+2022" }); document.fonts.add(await f.load()); } catch (e) { if (DEBUG) console.warn("fonte não carregou:", file); } }));
+    if (await probe(A("spike.png"), 1500)) {
+      stage.style.setProperty("--spike-mask", `url("${A("spike.png")}")`);
+      $("spk").innerHTML = "<i></i>";
+      SPIKE_HTML = "<i></i>";
+    }
+    if (await probe(A("Escudos/CV.png"), 1500)) CREDIT = `<img class="cv" src="${A("Escudos/CV.png")}" alt="">`;
+  }
+
+  // ---------- partida real ----------
+  const status = $("status");
+  const show = (m) => { if (DEBUG) { status.classList.toggle("hidden", !m); status.textContent = m || ""; } };
+  const ready = loadResources();
+
+  if (MODE === "live") {
+    let data = null, media = false;
+    stage.style.visibility = "hidden"; // nada na tela até chegar a primeira partida do servidor
+    ready.then(() => {
+      if (typeof io === "undefined") { show("socket.io não carregou (sem internet no PC do OBS?)"); return; }
+      const socket = io(SERVER, { reconnection: true });
+      const logon = () => socket.emit("logon", JSON.stringify({ groupCode }));
+      show("Conectando a " + SERVER + "…");
+      socket.on("connect", logon);
+      socket.on("logon_success", () => show(""));
+      socket.on("logon_failed", () => show("Código não aceito pelo servidor: " + groupCode));
+      socket.on("connect_error", () => show("Sem conexão com " + SERVER));
+      socket.on("match_data", (raw) => {
+        try { data = typeof raw === "string" ? JSON.parse(raw) : raw; } catch (e) { return; }
+        stage.style.visibility = "";
+        if (!media) { media = true; startMedia(data); }
+      });
+      setInterval(() => { if (data) render(data, performance.now() / 1000); }, 100);
+    });
+    return;
+  }
+
+  // ---------- prévia com dados simulados (só sem groupCode) ----------
+  if (!CLEAN) $("demo-tag").classList.remove("hidden");
+  const ROSTERS = window.HUD_FIXTURE || [
+    { teamName: "Jangada Esports", teamTricode: "JGD", players: [["kaiaque", "Jett"], ["mareh", "Omen"], ["tucunare", "Sova"], ["ventosul", "Killjoy"], ["cajuzin", "Breach"]] },
+    { teamName: "Caatinga Club", teamTricode: "CTG", players: [["xique", "Raze"], ["mandacaru", "Viper"], ["lampiao", "Fade"], ["seriema", "Cypher"], ["aboio", "Astra"]] },
+  ];
+  // dados vindos do capturador pela URL (nome, sigla, logo, quem ataca, fase, mapa)
+  const PN = (k) => (params.get(k) || "").trim();
+  if (PN("ln") || PN("rn") || PN("lt") || PN("rt")) {
+    [["l", 0], ["r", 1]].forEach(([s, i]) => {
+      if (PN(s + "n")) ROSTERS[i].teamName = PN(s + "n");
+      if (PN(s + "t")) ROSTERS[i].teamTricode = PN(s + "t");
+      if (PN(s + "g")) ROSTERS[i].teamUrl = PN(s + "g");
+    });
+  }
+  window.HUD_FIXTURE_SERIES = { needed: Number(params.get("need") ?? 2), wonLeft: Number(params.get("wl")) || 0, wonRight: Number(params.get("wr")) || 0 };
+  if (PN("maps")) window.HUD_FIXTURE_MAPINFO = PN("maps").split(",").map((x) => { const [type, map] = x.split(":"); return { type, map }; });
+  if (PN("stage")) window.HUD_FIXTURE_STAGE = PN("stage");
+  if (PN("map")) window.HUD_FIXTURE_MAP = PN("map");
+  const internalOf = (n) => Object.keys(AGENTS).find((k) => AGENTS[k] === n) || n;
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  function newMatch() {
+    return {
+      groupCode: "DEMO", roundNumber: 1, roundPhase: "shopping", map: (window.HUD_FIXTURE_MAP || "Ascent"), attackersWon: false, switchRound: 13, firstOtRound: 25,
+      spikeState: { planted: false, defused: false, detonated: false },
+      timeoutState: { techPause: false, leftTeam: false, rightTeam: false, timeRemaining: 0 },
+      tools: { seriesInfo: Object.assign({ needed: 2, wonLeft: 0, wonRight: 0, mapInfo: [{ type: "present", map: "Ascent" }, { type: "future", map: "Juliett" }, { type: "future", map: "Ascent" }] }, window.HUD_FIXTURE_SERIES || {}, window.HUD_FIXTURE_MAPINFO ? { mapInfo: window.HUD_FIXTURE_MAPINFO } : {}), tournamentInfo: { name: window.HUD_FIXTURE_STAGE || "Prévia" }, timeoutCounter: { max: 2, left: 2, right: 2 } },
+      teams: ROSTERS.map((t, ti) => ({
+        teamName: t.teamName, teamTricode: t.teamTricode, teamUrl: t.teamUrl || "", isAttacking: PN("att") ? (PN("att") === "l" ? ti === 0 : ti === 1) : ti === 1, roundsWon: 0, roundRecord: [],
+        players: t.players.map(([name, agent], pi) => ({
+          name, playerId: ti * 5 + pi, isAlive: true, agentInternal: internalOf(agent), armorName: "None", money: 800, moneySpent: 0,
+          highestWeapon: "Classic", currUltPoints: 0, maxUltPoints: 7, ultReady: false, hasSpike: false,
+          auxiliaryAvailable: { health: true, abilities: true, scoreboard: true },
+          kills: 0, deaths: 0, assists: 0, killsThisRound: 0, health: 100, isObserved: false, abilities: { grenade: 1, ability1: 1, ability2: 0 },
+        })),
+      })),
+    };
+  }
+  const sim = { d: newMatch(), t: 0, at: 0, nextEvent: 0, plantAt: 0, nextObs: 0, plan: [] };
+  function startShopping() {
+    const d = sim.d; d.roundPhase = "shopping"; sim.at = sim.t; sim.plan = [];
+    d.spikeState = { planted: false, defused: false, detonated: false };
+    d.teams.forEach((t) => t.players.forEach((p) => {
+      p.isAlive = true; p.health = 100; p.killsThisRound = 0; p.deathsThisRound = 0; p.killedPlayerNames = []; p.moneySpent = 0; p.isObserved = false; p.hasSpike = false;
+      p.abilities = { grenade: 1, ability1: 1, ability2: 0 };
+      let w = p.highestWeapon, a = p.armorName;
+      if (p.money >= 3900) { w = pick(["Vandal", "Phantom", "Warden"]); a = "Heavy"; } else if (p.money >= 2400) { w = pick(["Spectre", "Bulldog"]); a = "Light"; } else if (p.money >= 1100 && w === "Classic") { w = pick(["Sheriff", "Ghost"]); }
+      const cost = Math.min(p.money, (w !== p.highestWeapon ? COST[w] : 0) + (a !== p.armorName ? COST[a] || 0 : 0) + 200);
+      sim.plan.push({ p, cost, w, a, at: rnd(2, 14) });
+    }));
+    const att = d.teams.find((t) => t.isAttacking); pick(att.players).hasSpike = true;
+  }
+  const buy = (b) => { if (b.done) return; b.done = true; b.p.money -= b.cost; b.p.moneySpent += b.cost; b.p.highestWeapon = b.w; b.p.armorName = b.a; b.p.abilities = { grenade: 1, ability1: 2, ability2: 1 }; };
+  function startCombat() { sim.plan.forEach(buy); sim.plan = []; sim.d.roundPhase = "combat"; sim.at = sim.t; sim.nextEvent = sim.t + rnd(6, 12); sim.plantAt = sim.t + rnd(35, 60); sim.nextObs = sim.t; }
+  function endRound(attWon, reason) {
+    const d = sim.d; if (d.roundPhase === "end") return;
+    d.roundPhase = "end"; sim.at = sim.t; d.attackersWon = attWon;
+    d.teams.forEach((t) => {
+      const won = t.isAttacking === attWon; if (won) t.roundsWon++;
+      t.roundRecord.push({ type: won ? reason : "lost", wasAttack: t.isAttacking, round: d.roundNumber });
+      t.players.forEach((p) => { p.money = Math.min(9000, p.money + (won ? 3000 : 1900) + p.killsThisRound * 200); if (!p.isAlive) { p.highestWeapon = "Classic"; p.armorName = "None"; } p.isObserved = false; });
+    });
+  }
+  function nextRound() { const d = sim.d; if (d.teams.some((t) => t.roundsWon >= 13)) { sim.d = newMatch(); startShopping(); return; } d.roundNumber++; if (d.roundNumber === d.switchRound) d.teams.forEach((t) => (t.isAttacking = !t.isAttacking)); startShopping(); }
+  function fight() {
+    const [X, Y] = sim.d.teams, alive = (t) => t.players.filter((p) => p.isAlive);
+    if (!alive(X).length || !alive(Y).length) return;
+    const st = Math.random() < 0.5 ? X : Y, tt = st === X ? Y : X, s = pick(alive(st)), v = pick(alive(tt));
+    if (Math.random() < 0.5) { const k = pick(["grenade", "ability1", "ability2"]); s.abilities[k] = Math.max(0, s.abilities[k] - 1); }
+    v.health = Math.max(0, v.health - (Math.random() < 0.55 ? 999 : Math.round(rnd(15, 70))));
+    if (!v.health) {
+      v.isAlive = false; v.deaths++; v.deathsThisRound = 1; s.kills++; s.killsThisRound++; (s.killedPlayerNames = s.killedPlayerNames || []).push(v.name);
+      if (v.hasSpike) v.hasSpike = false;
+      const h = alive(st).find((p) => p !== s); if (h && Math.random() < 0.4) h.assists++;
+      s.currUltPoints = Math.min(s.maxUltPoints, s.currUltPoints + 1); s.ultReady = s.currUltPoints >= s.maxUltPoints;
+      if (v.isObserved) sim.nextObs = sim.t;
+    }
+  }
+  // prévia da seleção de agentes (?demo&agentes): cada jogador passa o mouse num agente, às vezes troca, e trava
+  function startLobby() {
+    const d = sim.d; d.roundPhase = "LOBBY"; sim.at = sim.t;
+    const pool = Object.keys(AGENTS);
+    sim.lobby = d.teams.flatMap((t) => t.players).map((p) => {
+      const fin = p.agentInternal, hv = sim.t + rnd(0.8, 9), alt = pick(pool);
+      p.agentInternal = ""; p.locked = false;
+      return { p, fin, alt, hv, sw: hv + rnd(1, 2.5), lk: hv + rnd(3.5, 7) };
+    });
+  }
+  function stepLobby() {
+    let last = 0;
+    sim.lobby.forEach((x) => {
+      if (sim.t >= x.hv && sim.t < x.sw) x.p.agentInternal = x.alt + "_PC_C";
+      if (sim.t >= x.sw) x.p.agentInternal = x.fin;
+      if (sim.t >= x.lk) x.p.locked = true;
+      last = Math.max(last, x.lk);
+    });
+    if (sim.t > last + 5) startShopping();
+  }
+  function step(dt) {
+    const d = sim.d; sim.t += dt; const el = sim.t - sim.at;
+    if (d.roundPhase === "LOBBY") stepLobby();
+    else if (d.roundPhase === "shopping") { sim.plan.forEach((b) => { if (el >= b.at) buy(b); }); if (el >= CONFIG.duracao.compra) startCombat(); }
+    else if (d.roundPhase === "combat") {
+      const att = d.teams.find((t) => t.isAttacking), def = d.teams.find((t) => !t.isAttacking);
+      const aA = att.players.some((p) => p.isAlive), dA = def.players.some((p) => p.isAlive);
+      if (sim.t >= sim.nextObs) { d.teams.forEach((t) => t.players.forEach((p) => (p.isObserved = false))); const c = d.teams.flatMap((t) => t.players.filter((p) => p.isAlive)); if (c.length) pick(c).isObserved = true; sim.nextObs = sim.t + rnd(6, 11); }
+      if (sim.t >= sim.nextEvent) { fight(); sim.nextEvent = sim.t + rnd(3, 8); }
+      if (!d.spikeState.planted && sim.t >= sim.plantAt && aA) { d.spikeState.planted = true; sim.plantAt = sim.t; att.players.forEach((p) => (p.hasSpike = false)); }
+      if (d.spikeState.planted) { if (sim.t - sim.plantAt >= CONFIG.duracao.spike) { d.spikeState.detonated = true; endRound(true, "detonated"); } else if (!dA) endRound(true, "kills"); else if (!aA && sim.t - sim.plantAt > 8) { d.spikeState.defused = true; endRound(false, "defused"); } }
+      else if (!aA) endRound(false, "kills"); else if (!dA) endRound(true, "kills"); else if (el >= CONFIG.duracao.combate) endRound(false, "timeout");
+    } else if (d.roundPhase === "end" && el >= 6) nextRound();
+  }
+  startShopping();
+  if (params.has("agentes")) startLobby();
+  window.__sim = sim;
+  // ?state=buy|combat|plant|dead congela a prévia num momento (para comparar com a referência)
+  const freeze = params.get("state");
+  if (freeze) {
+    const d = sim.d;
+    if (freeze === "agentes") {
+      d.roundPhase = "LOBBY";
+      d.teams.flatMap((t) => t.players).forEach((p, i) => { p.locked = i !== 2 && i !== 6 && i !== 8; if (i === 8) p.agentInternal = ""; });
+    } else if (freeze !== "buy") startCombat();
+    if (freeze === "dead" || freeze === "plant") {
+      const [X, Y] = d.teams;
+      [X.players[0], X.players[2], X.players[4]].forEach((p) => { p.isAlive = false; p.deaths = 1; p.health = 0; });
+      Y.players[1].kills = 1; Y.players[3].kills = 1; Y.players[4].kills = 1; Y.players[0].assists = 1; Y.players[3].killsThisRound = 1; Y.players[1].health = 70;
+      if (freeze === "plant") d.spikeState.planted = true;
+      d.teams.forEach((t) => t.players.forEach((p) => (p.isObserved = false))); Y.players[3].isObserved = true;
+    } else if (freeze === "combat") d.teams[0].players[4].isObserved = true;
+    else if (freeze === "1x1") {
+      d.teams.forEach((t, ti) => t.players.forEach((p, i) => { if (i !== (ti ? 1 : 3)) { p.isAlive = false; p.health = 0; p.deaths = 1; } p.isObserved = false; }));
+      d.teams[1].players[1].isObserved = true; d.teams[1].players[1].kills = 3; d.teams[0].players[3].kills = 2; d.teams[0].players[3].health = 41;
+    }
+    if (window.HUD_FIXTURE_PATCH) window.HUD_FIXTURE_PATCH(d);
+  }
+  let last = performance.now();
+  const frozenT = Number(params.get("t")) || 0; // segundos decorridos na fase congelada
+  ready.then(() => {
+    startMedia(sim.d);
+    if (freeze) render(sim.d, 0);
+    (function frame(ts) {
+      const dt = Math.min(0.25, (ts - last) / 1000); last = ts;
+      if (!freeze) step(dt * (Number(params.get("speed")) || 1));
+      render(sim.d, freeze ? frozenT : sim.t);
+      requestAnimationFrame(frame);
+    })(last);
+  });
+})();
+</script>
+</body>
+</html>
