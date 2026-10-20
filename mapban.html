@@ -5,6 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Veto de mapas</title>
 <script src="config.js"></script>
+<script>
+// config/config.json (opcional) completa o config.js — servidor, cores, logo e patrocinadores sem mexer no HTML
+(function () {
+  var C = window.HUD_CONFIG = window.HUD_CONFIG || {};
+  try {
+    var x = new XMLHttpRequest(); x.open("GET", "config/config.json", false); x.send();
+    if (x.status === 200 || (x.status === 0 && x.responseText)) { var j = JSON.parse(x.responseText); for (var k in j) C[k] = j[k]; }
+  } catch (e) { /* sem config.json: fica o config.js / os padrões */ }
+  if (C.cores) for (var v in C.cores) document.documentElement.style.setProperty("--" + v.replace(/^--/, ""), C.cores[v]);
+})();
+</script>
 <script src="socket.io.min.js"></script>
 <script>window.io || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"><\/script>');</script>
 <style>
@@ -189,7 +200,7 @@ img { display: block; }
     await Promise.all(fonts.map(async ([fam, file, w]) => { try { const f = new FontFace(fam, `url("${A(file)}")`, { weight: w, unicodeRange: "U+0020-007E, U+00B7, U+2013-2014, U+2022, U+2026" }); document.fonts.add(await f.load()); } catch (e) { /* usa a reserva */ } }));
   })();
   // logo da Looking no topo (Resources/Logos/looking.png)
-  (() => { const im = new Image(); im.onload = () => { $("flag").innerHTML = ""; $("flag").appendChild(im); }; im.src = A("Logos/looking.png"); })();
+  (() => { const im = new Image(); im.onload = () => { $("flag").innerHTML = ""; $("flag").appendChild(im); }; im.src = CONFIG.logo || A("Logos/looking.png"); })();
 
   // ---------- regras de formato (mesma lógica do nobii) ----------
   const SEQ = { bo1: ["ban", "ban", "ban", "ban", "ban", "ban", "decider"], bo3: ["ban", "ban", "pick", "pick", "ban", "ban", "decider"], bo5: ["ban", "ban", "pick", "pick", "pick", "pick", "decider"] };

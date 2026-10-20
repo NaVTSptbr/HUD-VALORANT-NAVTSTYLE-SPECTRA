@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>overlay</title>
+<script>
+  // endereço curto: leva para a tela certa mantendo os parâmetros do link (?groupCode=, ?sessionId=, &demo…)
+  var t = "../vctcn.html?modo=overlay", q = location.search.replace(/^\?/, "");
+  location.replace(t + (q ? (t.indexOf("?") < 0 ? "?" : "&") + q : "") + location.hash);
+</script></head><body style="background:transparent"></body></html>

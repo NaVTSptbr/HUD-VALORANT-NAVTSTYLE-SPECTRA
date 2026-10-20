@@ -5,6 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HUD VCT CN</title>
 <script src="config.js"></script>
+<script>
+// config/config.json (opcional) completa o config.js — servidor, cores, logo e patrocinadores sem mexer no HTML
+(function () {
+  var C = window.HUD_CONFIG = window.HUD_CONFIG || {};
+  try {
+    var x = new XMLHttpRequest(); x.open("GET", "config/config.json", false); x.send();
+    if (x.status === 200 || (x.status === 0 && x.responseText)) { var j = JSON.parse(x.responseText); for (var k in j) C[k] = j[k]; }
+  } catch (e) { /* sem config.json: fica o config.js / os padrões */ }
+  if (C.cores) for (var v in C.cores) document.documentElement.style.setProperty("--" + v.replace(/^--/, ""), C.cores[v]);
+})();
+</script>
 <script src="socket.io.min.js"></script>
 <script>window.io || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"><\/script>');</script>
 <style>
@@ -147,6 +158,7 @@ img { display: block; }
 .stage.lobby .combat, .stage.lobby .buy { display: none; }
 /* antes da partida (seleção de agentes / carregando) a HUD não cobre o topo do jogo: só a faixa da seleção pode aparecer */
 .stage.lobby > .abs:not(.asel):not(.dbg) { opacity: 0 !important; }
+.stage.only-asel > .abs:not(.asel):not(.dbg) { display: none !important; }
 .dbg { left: 12px; top: 40px; padding: 6px 10px; background: rgba(0, 0, 0, 0.82); font: 700 14px/1.2 var(--f-num); color: #9ff59f; white-space: nowrap; z-index: 50; }
 .pip { fill: rgba(10, 16, 24, 0.55); stroke: #f2f5f7; stroke-width: 1.4; }
 .pip.won.l { fill: var(--l-hi); stroke: var(--l-hi); }
@@ -553,6 +565,11 @@ img { display: block; }
     if (typeof C.listenIn === "boolean") CONFIG.listenIn = C.listenIn;
     if (typeof C.corPorLado === "boolean") CONFIG.corPorLado = C.corPorLado;
     if (typeof C.armasParaDireita === "boolean") CONFIG.armasParaDireita = C.armasParaDireita;
+    ["quadroVitoria", "destaque1x1", "selecaoAgentes", "patrocinadoresLocais"].forEach((k) => { if (typeof C[k] === "boolean") CONFIG[k] = C[k]; });
+    if (Number(C.trocaPatrocinio) > 0) CONFIG.trocaPatrocinio = Number(C.trocaPatrocinio);
+    if (Array.isArray(C.patrocinadores)) CONFIG.patrocinadores = C.patrocinadores.filter(Boolean);
+    if (C.logo) CONFIG.logo = C.logo;
+    if (C.modo) CONFIG.modo = C.modo;
   }
   // no vídeo as armas do time da esquerda apontam para a direita (para o centro) e as do time da direita para a esquerda
   const FLIP_SIDE = CONFIG.armasParaDireita ? "r" : "l";
@@ -576,6 +593,9 @@ img { display: block; }
   const groupCode = (params.get("groupCode") || CONFIG.codigo || "").toUpperCase();
   const SERVER = params.get("server") || CONFIG.servidor || "http://localhost:5200";
   const MODE = groupCode && !params.has("demo") ? "live" : "demo"; // ?demo força a prévia simulada
+  // o que esta fonte mostra: "overlay" (só o jogo), "agentes" (só a seleção de agentes) ou "auto" (os dois, trocando sozinho)
+  const VIEW = (() => { const m = String(params.get("modo") || CONFIG.modo || "auto").toLowerCase(); return m.startsWith("over") ? "overlay" : m.startsWith("agent") || m.startsWith("selec") ? "agentes" : "auto"; })();
+  if (VIEW === "overlay") CONFIG.selecaoAgentes = false;
   const DEBUG = params.has("debug");
   const CLEAN = params.has("clean");
   let BASE = params.get("assets") || CONFIG.recursos;
@@ -725,6 +745,7 @@ img { display: block; }
 
   const $ = (id) => document.getElementById(id);
   const stage = $("stage");
+  if (VIEW === "agentes") stage.classList.add("only-asel");
   const fit = () => {
     const w = innerWidth, h = innerHeight, s = Math.min(w / 1920, h / 1080);
     stage.style.setProperty("--s", String(s));
@@ -998,7 +1019,7 @@ img { display: block; }
       const f = $("as-flag"), im = new Image();
       im.onload = () => { f.innerHTML = ""; f.appendChild(im); };
       im.onerror = () => { if (tl && im.src !== tl) im.src = tl; };
-      im.src = A("Logos/looking.png");
+      im.src = CONFIG.logo || A("Logos/looking.png");
     }
     setText($("as-map"), mapLabel(d.map) || "");
     d.teams.forEach((t, i) => {
@@ -1370,6 +1391,7 @@ img { display: block; }
     if (key === brandKey || brandBusy) return;
     brandBusy = true; brandKey = key;
     let list = remote;
+    if (!list.length && CONFIG.patrocinadores && CONFIG.patrocinadores.length) list = CONFIG.patrocinadores;
     if (!list.length && tlogo) list = [tlogo];
     if (!list.length && (MODE !== "live" || CONFIG.patrocinadoresLocais)) list = await listImages("Sponsors/Sponsor");
     const dur = Number(si.duration) || 0; // o Spectra manda em milissegundos (ex.: 5000)
@@ -1531,10 +1553,11 @@ img { display: block; }
       if (sim.t >= x.lk) x.p.locked = true;
       last = Math.max(last, x.lk);
     });
-    if (sim.t > last + 5) startShopping();
+    if (sim.t > last + 5) { startShopping(); if (VIEW === "agentes") sim.again = sim.t + 3; }
   }
   function step(dt) {
     const d = sim.d; sim.t += dt; const el = sim.t - sim.at;
+    if (VIEW === "agentes" && sim.again && sim.t > sim.again) { sim.again = 0; sim.d = newMatch(); startLobby(); return; }
     if (d.roundPhase === "LOBBY") stepLobby();
     else if (d.roundPhase === "shopping") { sim.plan.forEach((b) => { if (el >= b.at) buy(b); }); if (el >= CONFIG.duracao.compra) startCombat(); }
     else if (d.roundPhase === "combat") {
@@ -1548,7 +1571,7 @@ img { display: block; }
     } else if (d.roundPhase === "end" && el >= 6) nextRound();
   }
   startShopping();
-  if (params.has("agentes")) startLobby();
+  if (params.has("agentes") || (VIEW === "agentes" && !params.get("state"))) startLobby();
   window.__sim = sim;
   // ?state=buy|combat|plant|dead congela a prévia num momento (para comparar com a referência)
   const freeze = params.get("state");

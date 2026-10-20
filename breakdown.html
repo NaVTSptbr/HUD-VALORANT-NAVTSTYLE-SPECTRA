@@ -5,6 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Resumo da partida</title>
 <script src="config.js"></script>
+<script>
+// config/config.json (opcional) completa o config.js — servidor, cores, logo e patrocinadores sem mexer no HTML
+(function () {
+  var C = window.HUD_CONFIG = window.HUD_CONFIG || {};
+  try {
+    var x = new XMLHttpRequest(); x.open("GET", "config/config.json", false); x.send();
+    if (x.status === 200 || (x.status === 0 && x.responseText)) { var j = JSON.parse(x.responseText); for (var k in j) C[k] = j[k]; }
+  } catch (e) { /* sem config.json: fica o config.js / os padrões */ }
+  if (C.cores) for (var v in C.cores) document.documentElement.style.setProperty("--" + v.replace(/^--/, ""), C.cores[v]);
+})();
+</script>
 <style>
 /* =====================================================================
    RESUMO PÓS-MAPA — 1920×1080, fundo transparente (a imagem de fundo fica no OBS)
@@ -183,7 +194,7 @@ img { display: block; }
   const fontsReady = Promise.all([["FoundryGridnik-Regular.otf", "400"], ["FoundryGridnik-Bold.otf", "700"], ["FoundryGridnik-ExtraBold.otf", "800"]].map(async ([f, w]) => {
     try { const ff = new FontFace("HUDGridnik", `url("${A(f)}")`, { weight: w, unicodeRange: "U+0020-007E, U+00B7, U+2013-2014, U+2022" }); document.fonts.add(await ff.load()); } catch (e) { /* reserva */ }
   }));
-  (() => { const im = new Image(); im.onload = () => { $("flag").innerHTML = ""; $("flag").appendChild(im); }; im.src = A("Logos/looking.png"); })();
+  (() => { const im = new Image(); im.onload = () => { $("flag").innerHTML = ""; $("flag").appendChild(im); }; im.src = CONFIG.logo || A("Logos/looking.png"); })();
 
   const FOLDER = { "KAY/O": "Kayo" };
   const agentFolder = (n) => FOLDER[n] || n || "";
@@ -299,7 +310,7 @@ img { display: block; }
       <div class="abs brandc wipe" style="--d:200;--x:200"><b>LOOKING</b></div>
       <div class="abs stats rv" style="--d:250;--x:100">${stats.map((s, i) => row(s[0], s[1], s[2], s[3], s[4], i)).join("")}</div>
       <div class="abs tl rv" style="--d:800;--x:0"><h4>${L.rounds}</h4><div class="side"><span class="a">${esc(a.tri || a.name)}</span><span class="b">${esc(b.tri || b.name)}</span></div><div class="rr">${tl}</div></div>`;
-    const im = new Image(); im.onload = () => { const bc = v.querySelector(".brandc"); bc.innerHTML = ""; bc.appendChild(im); }; im.src = A("Logos/looking.png");
+    const im = new Image(); im.onload = () => { const bc = v.querySelector(".brandc"); bc.innerHTML = ""; bc.appendChild(im); }; im.src = CONFIG.logo || A("Logos/looking.png");
   }
   function show(S, info) {
     const R = compute(S, info);
