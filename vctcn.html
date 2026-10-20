@@ -157,7 +157,8 @@ img { display: block; }
 .toast b:empty { display: none; }
 .stage.lobby .combat, .stage.lobby .buy { display: none; }
 /* antes da partida (seleção de agentes / carregando) a HUD não cobre o topo do jogo: só a faixa da seleção pode aparecer */
-.stage.lobby > .abs:not(.asel):not(.dbg) { opacity: 0 !important; }
+/* a HUD só sai do topo na seleção de agentes quando há jogadores (sem jogadores, o placar continua visível e mostra que está conectada) */
+.stage.lobby.has-players > .abs:not(.asel):not(.dbg) { opacity: 0 !important; }
 .stage.only-asel > .abs:not(.asel):not(.dbg) { display: none !important; }
 .dbg { left: 12px; top: 40px; padding: 6px 10px; background: rgba(0, 0, 0, 0.82); font: 700 14px/1.2 var(--f-num); color: #9ff59f; white-space: nowrap; z-index: 50; }
 .pip { fill: rgba(10, 16, 24, 0.55); stroke: #f2f5f7; stroke-width: 1.4; }
@@ -882,6 +883,7 @@ img { display: block; }
     if (!planted) clock.spikeAt = null;
     stage.classList.toggle("shop", phase === "shopping");
     stage.classList.toggle("lobby", phase === "LOBBY");
+    stage.classList.toggle("has-players", d.teams.some((t) => (t.players || []).length > 0));
     // &debug: mostra o que o Spectra está mandando (para achar onde falta dado)
     if (DEBUG) {
       const pc = d.teams.map((t) => (t.players || []).length), rr = d.teams.map((t) => (t.roundRecord || []).length);
