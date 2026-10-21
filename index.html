@@ -39,7 +39,7 @@
     const code = encodeURIComponent(c.value.trim().toUpperCase() || "CODIGO"), ses = encodeURIComponent(s.value.trim() || "SESSAO");
     const links = [["Overlay in-game", `overlay/?groupCode=${code}`], ["Seleção de agentes", `agent-select/?groupCode=${code}`],
       ["Veto de mapas", `mapban/?sessionId=${ses}`], ["Resumo dos jogadores (pós-mapa)", `team-breakdown/?groupCode=${code}`],
-      ["Resumo do mapa (pós-mapa)", `map-breakdown/?groupCode=${code}`], ["Overlay + seleção de agentes na mesma fonte (autoswitch)", `autoswitch/?groupCode=${code}`]];
+      ["Resumo do mapa (pós-mapa)", `map-breakdown/?groupCode=${code}`], ["Comunicação ao vivo (voz + câmera)", `comms/?groupCode=${code}`], ["Overlay + seleção de agentes na mesma fonte (autoswitch)", `autoswitch/?groupCode=${code}`]];
     l.innerHTML = links.map(([t, u]) => `<li><b>${t}</b><a href="${base + u}" target="_blank">${base + u}</a></li>`).join("");
   };
   c.addEventListener("input", draw); s.addEventListener("input", draw); draw(); c.focus();
