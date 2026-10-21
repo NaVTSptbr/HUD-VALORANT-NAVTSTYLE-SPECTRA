@@ -1088,8 +1088,11 @@ img { display: block; }
       }
       return;
     }
-    const ti = want === "left" ? 0 : 1, T = d.teams[ti] || {}, room = pc.identifier || "";
-    const ps = (T.players || []).slice(0, 5);
+    const ti = want === "left" ? 0 : 1, T = d.teams[ti] || {}, room = pc.identifier || params.get("sala") || "";
+    let ps = (T.players || []).slice(0, 5);
+    // sem a lista de jogadores do jogo (roster do Overwolf fora do ar): &jogadores=Nick#TAG,Nick2#TAG2… no link
+    const manual = (params.get("jogadores") || "").split(",").map((s) => s.trim()).filter(Boolean);
+    if (!ps.length && manual.length) ps = manual.slice(0, 5).map((full) => ({ fullName: full, name: full.split("#")[0] }));
     const key = want + "|" + room + "|" + ps.map((p) => p.fullName || p.name).join();
     el.classList.toggle("t-l", sideOf(ti) === "l"); el.classList.toggle("t-r", sideOf(ti) === "r");
     setSrc($("li-logo"), T.teamUrl || A(`Logos/logo${ti + 1}.png`));

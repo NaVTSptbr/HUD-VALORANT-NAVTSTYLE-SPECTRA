@@ -24,7 +24,7 @@ Cada tela é uma fonte de navegador de **1920 × 1080** no OBS.
 - **Seleção de agentes:** aparece sozinha durante a seleção e some quando o jogo começa. Conecte o Spectra Client antes da seleção.
 - **Resumos pós-mapa:** usam as estatísticas do Spectra, que chegam depois que o mapa termina. O fundo é transparente, para você colocar a sua imagem atrás no OBS.
 
-Opções que valem em qualquer link: `&demo` (prévia com dados inventados), `&debug` (mostra o que o Spectra está mandando), `&ouvir=l` ou `&ouvir=r` (força a comunicação ao vivo de um time) e `&saida=N` (no veto, segundos até sair depois de terminar; `0` = não sai).
+Opções que valem em qualquer link: `&demo` (prévia com dados inventados), `&debug` (mostra o que o Spectra está mandando), `&ouvir=l` ou `&ouvir=r` (força a comunicação ao vivo de um time), `&jogadores=Nick#TAG,Nick2#TAG2…` (jogadores da comunicação ao vivo quando o Spectra não manda a lista; use `%23` no lugar do `#` no link) e `&saida=N` (no veto, segundos até sair depois de terminar; `0` = não sai).
 
 ## Usar sem instalar
 
