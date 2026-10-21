@@ -520,6 +520,7 @@ img { display: block; }
 .li .tile .ring { position: absolute; inset: 0; border: 3px solid var(--li); opacity: 0; transition: opacity 120ms ease; box-shadow: inset 0 0 18px color-mix(in srgb, var(--li) 55%, transparent); }
 .li .tile.talk .spk { color: var(--li); filter: drop-shadow(0 0 6px var(--li)); }
 .li .tile.talk .ring { opacity: 1; }
+.li .tile.wait .nm, .li .tile.wait .spk { opacity: 0.45; }
 /* entrada: a aba e a linha abrem, depois os 5 quadros sobem um a um; saída ao contrário */
 .li .tab, .li .rule, .li .body { transition: clip-path 380ms cubic-bezier(.2, .8, .2, 1), transform 380ms cubic-bezier(.2, .8, .2, 1), opacity 260ms ease; }
 .li .rule { transform-origin: 0 50%; transform: scaleX(0); }
@@ -1065,6 +1066,13 @@ img { display: block; }
   // (sala = playercamsInfo.identifier, nome = Nome_H_Tag). O time ouvido vem do Spectra Client
   // (playercamsInfo.listenIn = "left" | "right"); ?ouvir=l|r força pelo link.
   const SPEAK_LIMIT = 10, SPEAK_HOLD = 400;
+  // lista pelo link (página "montar comms"): &sala=SALA&jogadores=Nick%23TAG,Nick2%23TAG… (1 a 5, pode faltar gente)
+  // não depende do jogo mandar os jogadores; quem não estiver transmitindo fica com o quadrado apagado
+  const LIST = (() => {
+    const sala = (params.get("sala") || "").trim();
+    const js = (params.get("jogadores") || "").split(",").map((x) => x.trim()).filter((x) => /^[^#]+#[^#]+$/.test(x)).slice(0, 5);
+    return sala && js.length ? { sala, players: js.map((f) => ({ fullName: f, name: f.split("#")[0] })) } : null;
+  })();
   // sala das câmeras: vem do Spectra (sessão de câmeras ativa no Client) ou do link (&sala=CODIGO da sessão)
   const camRoom = (d) => ((d.tools && d.tools.playercamsInfo && d.tools.playercamsInfo.identifier) || "").trim();
   const PLAY_SVG = '<svg viewBox="0 0 16 16"><path d="M3 2l11 6-11 6z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg>';
@@ -1073,7 +1081,7 @@ img { display: block; }
   addEventListener("message", (e) => {
     const k = LI.tiles.find((x) => x.frame && x.frame.contentWindow === e.source); if (!k) return;
     const m = e.data; if (!m || typeof m !== "object") return;
-    if (m.action === "view-connection") { k.ok = m.value === true; liReveal(); }
+    if (m.action === "view-connection") { k.ok = m.value === true; k.el.classList.toggle("wait", !k.ok); liReveal(); }
     if (m.action === "loudness" && m.loudness) {
       const v = Math.max(0, ...Object.values(m.loudness).map(Number));
       if (v > SPEAK_LIMIT) { k.el.classList.add("talk"); clearTimeout(k.t); k.t = setTimeout(() => k.el.classList.remove("talk"), SPEAK_HOLD); }
@@ -1083,7 +1091,9 @@ img { display: block; }
     const el = $("li");
     if (!LI.side || el.classList.contains("on")) return;
     // como no nobii: só aparece depois que as câmeras de todos os jogadores do time conectaram
-    if (LI.tiles.length && LI.tiles.every((k) => k.ok)) { el.classList.remove("out"); void el.offsetWidth; el.classList.add("on"); }
+    // (com a lista pelo link, aparece direto: quem faltar fica apagado)
+    LI.tiles.forEach((k) => k.el.classList.toggle("wait", !k.ok));
+    if (LI.tiles.length && (LIST || LI.tiles.every((k) => k.ok))) { el.classList.remove("out"); void el.offsetWidth; el.classList.add("on"); }
   }
   function renderListen(d) {
     const pc = (d.tools && d.tools.playercamsInfo) || {};
@@ -1102,14 +1112,15 @@ img { display: block; }
     let room = camRoom(d), ps = (T.players || []).slice(0, 5);
     // teste igual ao do nobii (testing/listen-in): prévia com jogadores simulados e UM jogador real da sessão de câmeras
     // ?demo&modo=comms&team=left&testeSala=SALA&testeJogador=Nick%23TAG
-    if (MODE === "demo" && params.get("testeSala") && params.get("testeJogador")) {
+    if (LIST) { room = LIST.sala; ps = LIST.players; }
+    else if (MODE === "demo" && params.get("testeSala") && params.get("testeJogador")) {
       room = params.get("testeSala").trim();
       const real = params.get("testeJogador").trim();
       ps = ps.map((p, i) => (i === 0 ? Object.assign({}, p, { fullName: real, name: real.split("#")[0] }) : p));
     }
     const key = want + "|" + room + "|" + ps.map((p) => p.fullName || p.name).join();
     el.classList.toggle("t-l", sideOf(ti) === "l"); el.classList.toggle("t-r", sideOf(ti) === "r");
-    setSrc($("li-logo"), T.teamUrl || A(`Logos/logo${ti + 1}.png`));
+    setSrc($("li-logo"), (LIST && params.get("logo")) || T.teamUrl || A(`Logos/logo${ti + 1}.png`));
     if (LI.key !== key) {
       LI.key = key; LI.side = want; LI.at = Date.now(); clearTimeout(LI.outT);
       const body = $("li-body"); body.innerHTML = "";
@@ -1480,6 +1491,14 @@ img { display: block; }
       });
       setInterval(() => { if (data) render(data, performance.now() / 1000); }, 100);
     });
+    return;
+  }
+
+  // ---------- comms só pela lista do link (sem groupCode) ----------
+  if (LIST && VIEW === "comms" && !params.has("demo")) {
+    const blank = () => ({ teamName: "", players: [] });
+    const d = { teams: [blank(), blank()], tools: {} };
+    ready.then(() => setInterval(() => renderListen(d), 250));
     return;
   }
 

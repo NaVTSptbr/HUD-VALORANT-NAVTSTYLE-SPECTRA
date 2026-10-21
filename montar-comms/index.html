@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Montar comms</title>
+<style>
+  :root { color-scheme: dark; --bg: #0f1520; --card: #161e2b; --line: #263244; --mut: #9fb0c0; --acc: #8fd3ff; --l: #f5b13d; --r: #3dd6c5; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: #e8edf1; font: 15px/1.45 "Segoe UI", system-ui, sans-serif; padding: 24px 16px 48px; }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  p.sub { margin: 0 0 18px; color: var(--mut); font-size: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+  label { display: block; font-size: 12px; color: var(--mut); margin: 10px 0 5px; }
+  input { width: 100%; padding: 9px 11px; border-radius: 6px; border: 1px solid #2f3d52; background: var(--bg); color: #fff; font-size: 15px; }
+  input.bad { border-color: #e0605a; }
+  .lados { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  @media (max-width: 720px) { .lados { grid-template-columns: 1fr; } }
+  .lado h2 { margin: 0 0 4px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .lado h2 i { width: 10px; height: 10px; border-radius: 2px; background: var(--c); }
+  .lado.l { --c: var(--l); } .lado.r { --c: var(--r); }
+  .row { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: center; margin-top: 7px; }
+  .row span { color: var(--mut); font-size: 13px; text-align: right; }
+  .out { margin-top: 16px; }
+  .out h3 { margin: 18px 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--mut); }
+  .lk { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; background: var(--bg); border: 1px solid var(--line); border-left: 3px solid var(--c, var(--line)); border-radius: 6px; padding: 9px 11px; margin-top: 7px; }
+  .lk b { display: block; font-size: 13px; margin-bottom: 2px; }
+  .lk a { color: var(--acc); font-size: 12px; word-break: break-all; }
+  .lk button { border: 1px solid #2f3d52; background: #1d2738; color: #e8edf1; border-radius: 5px; padding: 6px 10px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+  .lk.l { --c: var(--l); } .lk.r { --c: var(--r); }
+  .vazio { color: var(--mut); font-size: 13px; margin-top: 6px; }
+  .nota { margin-top: 18px; font-size: 13px; color: var(--mut); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Montar comms</h1>
+  <p class="sub">Preencha a sala e os jogadores de uma vez. Pode deixar vagas em branco: o comms mostra só quem foi preenchido, e quem não estiver transmitindo fica apagado.</p>
+
+  <div class="card">
+    <label for="sala">Sala de câmeras: o código depois de /org/ no painel Playercams do Spectra (pode colar o link inteiro)</label>
+    <input id="sala" autocomplete="off" placeholder="SPPCXXXXXX">
+    <label for="gc">Código da partida (opcional: com ele o comms também recebe o logo do time pelo Spectra)</label>
+    <input id="gc" autocomplete="off" placeholder="ABC123">
+    <div class="lados" id="lados"></div>
+  </div>
+
+  <div class="out">
+    <h3>OBS: uma fonte de navegador por lado (1920×1080, marque "Controlar áudio via OBS")</h3>
+    <div id="obs"></div>
+    <h3>Jogadores: mande o link de cada um (ele abre no navegador e escolhe câmera e microfone)</h3>
+    <div id="env"></div>
+  </div>
+  <p class="nota">Cada jogador precisa fechar a página de câmera do Spectra antes de abrir o link dele: as duas usam o mesmo nome na sala.</p>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const base = location.origin + location.pathname.replace(/montar-comms\/(index\.html)?$/, "");
+  const LADOS = [["l", "left", "Time da esquerda"], ["r", "right", "Time da direita"]];
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const ler = (k) => { try { return localStorage.getItem("comms." + k) || ""; } catch (e) { return ""; } };
+  const gravar = (k, v) => { try { localStorage.setItem("comms." + k, v); } catch (e) {} };
+
+  $("lados").innerHTML = LADOS.map(([s, , t]) => `<div class="lado ${s}"><h2><i></i>${t}</h2>
+    <label for="${s}-logo">Logo do time (link da imagem, opcional)</label><input id="${s}-logo" autocomplete="off" placeholder="https://…/logo.png">
+    ${[1, 2, 3, 4, 5].map((n) => `<div class="row"><span>${n}</span><input id="${s}-${n}" autocomplete="off" placeholder="Nick#TAG"></div>`).join("")}</div>`).join("");
+
+  const campos = ["sala", "gc", ...LADOS.flatMap(([s]) => [s + "-logo", ...[1, 2, 3, 4, 5].map((n) => s + "-" + n)])];
+  campos.forEach((id) => { $(id).value = ler(id); $(id).addEventListener("input", desenhar); });
+
+  const salaDe = (v) => { v = v.trim(); const m = v.match(/\/org\/([^/?#]+)/i); return (m ? m[1] : v).trim(); };
+  const valido = (v) => /^[^#,]+#[^#,]+$/.test(v);
+  const linha = (cls, titulo, url) => `<div class="lk ${cls}"><div><b>${esc(titulo)}</b><a href="${esc(url)}" target="_blank">${esc(url)}</a></div><button data-u="${esc(url)}">Copiar</button></div>`;
+
+  function desenhar() {
+    campos.forEach((id) => gravar(id, $(id).value));
+    const sala = salaDe($("sala").value), gc = $("gc").value.trim().toUpperCase();
+    let obs = "", env = "";
+    LADOS.forEach(([s, team, t]) => {
+      const js = [];
+      [1, 2, 3, 4, 5].forEach((n) => { const el = $(s + "-" + n), v = el.value.trim(); el.classList.toggle("bad", !!v && !valido(v)); if (v && valido(v)) js.push(v); });
+      if (!sala || !js.length) { obs += `<div class="vazio">${t}: preencha a sala e pelo menos um jogador.</div>`; return; }
+      const logo = $(s + "-logo").value.trim();
+      const u = base + "listen-in/?" + (gc ? "groupCode=" + encodeURIComponent(gc) + "&" : "") + "team=" + team +
+        "&sala=" + encodeURIComponent(sala) + "&jogadores=" + js.map(encodeURIComponent).join(",") + (logo ? "&logo=" + encodeURIComponent(logo) : "");
+      obs += linha(s, `Comms — ${t} (${js.length} jogador${js.length > 1 ? "es" : ""})`, u);
+      js.forEach((j) => { env += linha(s, j, base + "enviar/?sala=" + encodeURIComponent(sala) + "&jogador=" + encodeURIComponent(j)); });
+    });
+    $("obs").innerHTML = obs;
+    $("env").innerHTML = env || '<div class="vazio">Os links aparecem aqui quando houver sala e jogadores.</div>';
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-u]"); if (!b) return;
+    const done = () => { b.textContent = "Copiado"; setTimeout(() => (b.textContent = "Copiar"), 1200); };
+    if (navigator.clipboard) navigator.clipboard.writeText(b.dataset.u).then(done, () => {});
+  });
+  desenhar();
+</script>
+</body>
+</html>
