@@ -90,6 +90,7 @@ Também dá para hospedar como site estático (GitHub Pages, Netlify) ou abrir o
 | `fase` | Texto do canto superior direito (vazio usa o nome do torneio do Spectra) |
 | `camera` | Moldura da câmera do jogador observado |
 | `listenIn` | Comunicação ao vivo (liga e desliga pelo Spectra Client) |
+| `sala` | Código da sessão de câmeras do Spectra (o que aparece em `playercams.valospectra.com/session/org/CODIGO/…`). Só precisa se o Spectra não mandar sozinho; também vale `&sala=` no link |
 | `destaque1x1`, `quadroVitoria`, `corPorLado` | Destaque de 1x1, quadro de round win e cor por lado (defesa / ataque) |
 | `cores` | Qualquer cor da HUD: `def-*` é a defesa, `att-*` o ataque e `brand-*` a marca |
 

@@ -295,6 +295,10 @@ img { display: block; }
 /* ---------- Câmera do jogador observado ---------- */
 .cam { left: 478px; top: 746px; width: 320px; height: 180px; transition: opacity var(--t-mid); }
 .cam .frame { position: absolute; inset: 0; }
+.cam .vid { position: absolute; inset: 3px; overflow: hidden; background: #05080c; }
+.cam .vid iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; visibility: hidden; }
+.cam .vid iframe.on { visibility: visible; }
+.cam .vid:empty { display: none; }
 .cam .frame svg { width: 100%; height: 100%; }
 .cam .cn, .cam .ck { position: absolute; bottom: 14px; font: 700 18px/1 var(--f-num); color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85); }
 .cam .cn { left: 18px; max-width: 190px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -571,6 +575,7 @@ img { display: block; }
     if (Array.isArray(C.patrocinadores)) CONFIG.patrocinadores = C.patrocinadores.filter(Boolean);
     if (C.logo) CONFIG.logo = C.logo;
     if (C.modo) CONFIG.modo = C.modo;
+    if (C.sala) CONFIG.sala = C.sala;
   }
   // no vídeo as armas do time da esquerda apontam para a direita (para o centro) e as do time da direita para a esquerda
   const FLIP_SIDE = CONFIG.armasParaDireita ? "r" : "l";
@@ -711,6 +716,7 @@ img { display: block; }
     <div class="abs cards r combat" id="cards-r"></div>
     <div class="abs duelb combat" id="duel"><div class="dn l" id="duel-l"></div><div class="dv">1 x 1</div><div class="dn r" id="duel-r"></div></div>
     <div class="abs cam combat" id="cam">
+      <div class="vid" id="cam-vid"></div>
       <div class="frame"><svg viewBox="0 0 320 180" preserveAspectRatio="none" aria-hidden="true">
         <path d="M1 1h86l6 4h134l6-4h86v178h-86l-6-4H93l-6 4H1z" fill="none" stroke="#1b2531" stroke-width="2.5"/>
         <path d="M0 20V0h20M300 0h20v20M320 160v20h-20M20 180H0v-20" fill="none" stroke="#3b4a59" stroke-width="2"/>
@@ -888,7 +894,7 @@ img { display: block; }
     if (DEBUG) {
       const pc = d.teams.map((t) => (t.players || []).length), rr = d.teams.map((t) => (t.roundRecord || []).length);
       const dbg = $("dbg"); dbg.classList.remove("hidden");
-      dbg.textContent = `fase: ${d.roundPhase ?? "(vazia)"} | rodada: ${d.roundNumber ?? "?"} | jogadores: ${pc[0]} x ${pc[1]} | placar: ${d.teams[0].roundsWon ?? "?"} x ${d.teams[1].roundsWon ?? "?"} | histórico: ${rr[0]}/${rr[1]} | mapa: ${d.map || "?"} | rodando: ${d.isRunning ? "sim" : "não"}`;
+      dbg.textContent = `fase: ${d.roundPhase ?? "(vazia)"} | rodada: ${d.roundNumber ?? "?"} | jogadores: ${pc[0]} x ${pc[1]} | placar: ${d.teams[0].roundsWon ?? "?"} x ${d.teams[1].roundsWon ?? "?"} | histórico: ${rr[0]}/${rr[1]} | mapa: ${d.map || "?"} | rodando: ${d.isRunning ? "sim" : "não"} | sala das câmeras: ${camRoom(d) || "nenhuma"} | ouvir: ${(d.tools && d.tools.playercamsInfo && d.tools.playercamsInfo.listenIn) || "não"}`;
     }
     overrides(d);
     SHOW_CREDITS = !!d.showAliveKDA;
@@ -1057,6 +1063,8 @@ img { display: block; }
   // (sala = playercamsInfo.identifier, nome = Nome_H_Tag). O time ouvido vem do Spectra Client
   // (playercamsInfo.listenIn = "left" | "right"); ?ouvir=l|r força pelo link.
   const SPEAK_LIMIT = 10, SPEAK_HOLD = 400;
+  // sala das câmeras: vem do Spectra (sessão de câmeras ativa no Client) ou do link (&sala=CODIGO da sessão)
+  const camRoom = (d) => ((d.tools && d.tools.playercamsInfo && d.tools.playercamsInfo.identifier) || params.get("sala") || CONFIG.sala || "").trim();
   const PLAY_SVG = '<svg viewBox="0 0 16 16"><path d="M3 2l11 6-11 6z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg>';
   const LI = { side: null, room: "", tiles: [], timer: null, outT: null };
   const liUrl = (room, full) => { const [n, t] = String(full || "").split("#"); return `https://vdo.ninja/?room=${encodeURIComponent(room)}&view=${encodeURIComponent((n || "").replaceAll(" ", "_") + "_H_" + (t || ""))}&scene=0&cleanoutput&vb=5000&transparent&waitmessage=&disablehotkeys&codec=h265,av1,h264,vp8&getloudness`; };
@@ -1088,7 +1096,7 @@ img { display: block; }
       }
       return;
     }
-    const ti = want === "left" ? 0 : 1, T = d.teams[ti] || {}, room = pc.identifier || params.get("sala") || "";
+    const ti = want === "left" ? 0 : 1, T = d.teams[ti] || {}, room = camRoom(d);
     let ps = (T.players || []).slice(0, 5);
     // sem a lista de jogadores do jogo (roster do Overwolf fora do ar): &jogadores=Nick#TAG,Nick2#TAG2… no link
     const manual = (params.get("jogadores") || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -1363,6 +1371,14 @@ img { display: block; }
     cam.classList.toggle("l", wi === 0); cam.classList.toggle("r", wi === 1);
     setText($("cam-n"), shownName(who));
     setText($("cam-kda"), `${who.kills ?? 0}/${who.deaths ?? 0}/${who.assists ?? 0}`);
+    // vídeo do jogador observado (câmeras dos jogadores do Spectra, sem som); cada câmera fica carregada para trocar na hora
+    const room = camRoom(d), box = $("cam-vid");
+    if (room && who.fullName) {
+      const id = "cv-" + who.fullName.replace(/[^a-z0-9]/gi, "_");
+      let f = document.getElementById(id);
+      if (!f) { f = document.createElement("iframe"); f.id = id; f.allow = "camera;fullscreen;autoplay"; f.src = liUrl(room, who.fullName).replace("&getloudness", "&mutespeaker"); box.appendChild(f); }
+      box.querySelectorAll("iframe").forEach((x) => x.classList.toggle("on", x === f));
+    } else box.querySelectorAll("iframe").forEach((x) => x.classList.remove("on"));
     const k = who.killsThisRound || 0;
     $("cam-k").classList.toggle("on", k > 0);
     setText($("cam-kn"), k);

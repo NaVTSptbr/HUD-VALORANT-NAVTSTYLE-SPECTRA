@@ -10,6 +10,7 @@
   "fase": "",
   "camera": true,
   "listenIn": true,
+  "sala": "",
   "destaque1x1": true,
   "quadroVitoria": true,
   "corPorLado": true,
