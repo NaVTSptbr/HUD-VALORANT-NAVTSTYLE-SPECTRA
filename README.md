@@ -19,11 +19,12 @@ Cada tela é uma fonte de navegador de **1920 × 1080** no OBS.
 | Resumo do mapa (pós-mapa) | `/map-breakdown/` | `?groupCode=CODIGO` |
 | Overlay + seleção de agentes juntos | `/autoswitch/` | `?groupCode=CODIGO` |
 | Comunicação ao vivo (listen-in) | `/listen-in/` | `?groupCode=CODIGO&team=left` ou `right` |
+| Envio de câmera + microfone (jogador) | `/enviar/` | `?sala=SALA&jogador=Nick%23TAG` |
 
 - `CODIGO` é o código da partida que você digita no Spectra Client. `SESSAO` é o código da sessão da ferramenta de veto do Spectra.
 - **Overlay in-game:** placar, cartões dos jogadores, compra, histórico de rodadas, round win (ace, clutch, flawless, econômico), pausa tática e técnica, destaque de 1x1, jogador observado em dourado e comunicação ao vivo (listen-in).
 - **Seleção de agentes:** aparece sozinha durante a seleção e some quando o jogo começa. Conecte o Spectra Client antes da seleção.
-- **Comunicação ao vivo (listen-in):** mesmo funcionamento do front do nobii. Mostra a câmera dos 5 jogadores do time escolhido com quem está falando aceso. O time vem do Spectra ou de `&team=left` / `&team=right` no link. Usa a sessão de câmeras dos jogadores do Spectra (Playercams); o áudio depende de a transmissão dos jogadores ter microfone.
+- **Comunicação ao vivo (listen-in):** mesmo funcionamento do front do nobii. Mostra a câmera dos 5 jogadores do time escolhido com quem está falando aceso. O time vem do Spectra ou de `&team=left` / `&team=right` no link. Usa a sessão de câmeras dos jogadores do Spectra (Playercams); o áudio depende de a transmissão dos jogadores ter microfone. A página de câmera do Spectra hoje envia sem microfone; para ter som, o jogador usa a página `/enviar/` no lugar dela (mesma sala, mesmo nome de stream, com câmera e microfone).
 - **Resumos pós-mapa:** usam as estatísticas do Spectra, que chegam depois que o mapa termina. O fundo é transparente, para você colocar a sua imagem atrás no OBS.
 
 Opções que valem em qualquer link: `&demo` (prévia com dados inventados), `&debug` (mostra o que o Spectra está mandando), `&team=left` ou `&team=right` (força a comunicação ao vivo de um time) e `&saida=N` (no veto, segundos até sair depois de terminar; `0` = não sai).

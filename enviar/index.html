@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enviar câmera e microfone</title>
+<style>
+  :root { color-scheme: dark; --bg: #0f1520; --card: #161e2b; --line: #263244; --mut: #9fb0c0; --acc: #8fd3ff; --warn: #ffcf6e; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: #e8edf1; font: 16px/1.45 "Segoe UI", system-ui, sans-serif; }
+  #form { min-height: 100%; display: grid; place-items: center; padding: 16px; }
+  main { width: min(520px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 28px; }
+  h1 { margin: 0 0 6px; font-size: 22px; }
+  p { margin: 0 0 14px; color: var(--mut); font-size: 14px; }
+  label { display: block; font-size: 13px; color: var(--mut); margin: 14px 0 6px; }
+  input { width: 100%; padding: 11px 12px; border-radius: 6px; border: 1px solid #2f3d52; background: var(--bg); color: #fff; font-size: 17px; }
+  button { margin-top: 20px; width: 100%; padding: 12px; border: 0; border-radius: 6px; background: var(--acc); color: #06121c; font-size: 16px; font-weight: 700; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  .aviso { margin-top: 16px; padding: 10px 12px; border-left: 3px solid var(--warn); background: #1d2433; font-size: 13px; color: #d9dfe6; }
+  .aviso b { color: var(--warn); }
+  .link { margin-top: 14px; font-size: 12px; color: var(--mut); word-break: break-all; }
+  .link a { color: var(--acc); }
+  #live { display: none; height: 100%; flex-direction: column; }
+  #live header { display: flex; gap: 12px; align-items: center; padding: 8px 14px; background: var(--card); border-bottom: 1px solid var(--line); font-size: 14px; }
+  #live header span { color: var(--mut); }
+  #live header a { margin-left: auto; color: var(--acc); cursor: pointer; }
+  #live iframe { flex: 1; width: 100%; border: 0; }
+  body.on #form { display: none; }
+  body.on #live { display: flex; }
+</style>
+</head>
+<body>
+<div id="form">
+  <main>
+    <h1>Câmera e microfone para a transmissão</h1>
+    <p>Página do jogador. Envia sua câmera <b>com o microfone</b> para a sala de câmeras do Spectra, no mesmo nome que a HUD procura.</p>
+    <label for="sala">Sala de câmeras (o código depois de /org/ no painel Playercams do Spectra)</label>
+    <input id="sala" autocomplete="off" placeholder="SPPCXXXXXX">
+    <label for="riot">Seu Riot ID, com a tag</label>
+    <input id="riot" autocomplete="off" placeholder="Nick#TAG">
+    <button id="ir" disabled>Escolher câmera e microfone</button>
+    <div class="aviso"><b>Antes de começar:</b> feche a página de câmera do Spectra. As duas usam o mesmo nome na sala e não podem ficar abertas juntas.<br>Tudo o que o microfone captar vai ao vivo quando o comms do seu time estiver na tela. Use o botão de mudo da página quando precisar.</div>
+    <div class="link" id="link"></div>
+  </main>
+</div>
+<div id="live">
+  <header><b id="quem"></b><span id="ondesala"></span><a id="sair">Parar e voltar</a></header>
+  <iframe id="vdo" allow="camera;microphone;autoplay;fullscreen;display-capture"></iframe>
+</div>
+<script>
+  // Mesmo nome de stream que a HUD procura (vctcn.html → liUrl): "Nick_H_TAG"
+  const streamId = full => { const [n, t] = String(full).split("#"); return (n || "").trim().replaceAll(" ", "_") + "_H_" + (t || "").trim(); };
+  const pushUrl = (sala, full) => "https://vdo.ninja/?room=" + encodeURIComponent(sala) +
+    "&push=" + encodeURIComponent(streamId(full)) +
+    "&label=" + encodeURIComponent(String(full).split("#")[0].trim()) +
+    "&webcam" +        // vai direto para a escolha de câmera e microfone
+    "&noaudio&novideo"; // não toca o som nem o vídeo dos outros jogadores da sala (o microfone continua ligado)
+
+  const q = new URLSearchParams(location.search), $ = id => document.getElementById(id);
+  const sala = $("sala"), riot = $("riot"), ir = $("ir");
+  const guardado = k => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
+  const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+  sala.value = q.get("sala") || guardado("enviar.sala");
+  riot.value = q.get("jogador") || guardado("enviar.riot");
+
+  const ok = () => sala.value.trim() && /^[^#]+#[^#]+$/.test(riot.value.trim());
+  const draw = () => {
+    ir.disabled = !ok();
+    const u = location.origin + location.pathname + "?sala=" + encodeURIComponent(sala.value.trim()) + "&jogador=" + encodeURIComponent(riot.value.trim());
+    $("link").innerHTML = ok() ? 'Link pronto para mandar ao jogador: <a href="' + u + '">' + u + "</a>" : "";
+  };
+  sala.addEventListener("input", draw); riot.addEventListener("input", draw); draw();
+
+  ir.addEventListener("click", () => {
+    if (!ok()) return;
+    const s = sala.value.trim(), r = riot.value.trim();
+    guardar("enviar.sala", s); guardar("enviar.riot", r);
+    $("quem").textContent = r;
+    $("ondesala").textContent = "sala " + s + " · stream " + streamId(r);
+    $("vdo").src = pushUrl(s, r);
+    document.body.classList.add("on");
+  });
+  $("sair").addEventListener("click", () => { $("vdo").src = "about:blank"; document.body.classList.remove("on"); });
+</script>
+</body>
+</html>
