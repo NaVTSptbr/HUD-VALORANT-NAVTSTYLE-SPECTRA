@@ -1098,8 +1098,15 @@ img { display: block; }
       }
       return;
     }
-    const ti = want === "left" ? 0 : 1, T = d.teams[ti] || {}, room = camRoom(d);
-    const ps = (T.players || []).slice(0, 5);
+    const ti = want === "left" ? 0 : 1, T = d.teams[ti] || {};
+    let room = camRoom(d), ps = (T.players || []).slice(0, 5);
+    // teste igual ao do nobii (testing/listen-in): prévia com jogadores simulados e UM jogador real da sessão de câmeras
+    // ?demo&modo=comms&team=left&testeSala=SALA&testeJogador=Nick%23TAG
+    if (MODE === "demo" && params.get("testeSala") && params.get("testeJogador")) {
+      room = params.get("testeSala").trim();
+      const real = params.get("testeJogador").trim();
+      ps = ps.map((p, i) => (i === 0 ? Object.assign({}, p, { fullName: real, name: real.split("#")[0] }) : p));
+    }
     const key = want + "|" + room + "|" + ps.map((p) => p.fullName || p.name).join();
     el.classList.toggle("t-l", sideOf(ti) === "l"); el.classList.toggle("t-r", sideOf(ti) === "r");
     setSrc($("li-logo"), T.teamUrl || A(`Logos/logo${ti + 1}.png`));
