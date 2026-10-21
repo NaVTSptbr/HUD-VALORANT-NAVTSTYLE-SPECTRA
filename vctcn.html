@@ -160,6 +160,7 @@ img { display: block; }
 /* a HUD só sai do topo na seleção de agentes quando há jogadores (sem jogadores, o placar continua visível e mostra que está conectada) */
 .stage.lobby.has-players > .abs:not(.asel):not(.dbg) { opacity: 0 !important; }
 .stage.only-asel > .abs:not(.asel):not(.dbg) { display: none !important; }
+.stage.only-li > .abs:not(.li):not(.dbg) { display: none !important; }
 .dbg { left: 12px; top: 40px; padding: 6px 10px; background: rgba(0, 0, 0, 0.82); font: 700 14px/1.2 var(--f-num); color: #9ff59f; white-space: nowrap; z-index: 50; }
 .pip { fill: rgba(10, 16, 24, 0.55); stroke: #f2f5f7; stroke-width: 1.4; }
 .pip.won.l { fill: var(--l-hi); stroke: var(--l-hi); }
@@ -600,8 +601,9 @@ img { display: block; }
   const SERVER = params.get("server") || CONFIG.servidor || "http://localhost:5200";
   const MODE = groupCode && !params.has("demo") ? "live" : "demo"; // ?demo força a prévia simulada
   // o que esta fonte mostra: "overlay" (só o jogo), "agentes" (só a seleção de agentes) ou "auto" (os dois, trocando sozinho)
-  const VIEW = (() => { const m = String(params.get("modo") || CONFIG.modo || "auto").toLowerCase(); return m.startsWith("over") ? "overlay" : m.startsWith("agent") || m.startsWith("selec") ? "agentes" : "auto"; })();
+  const VIEW = (() => { const m = String(params.get("modo") || CONFIG.modo || "auto").toLowerCase(); return m.startsWith("over") ? "overlay" : m.startsWith("agent") || m.startsWith("selec") ? "agentes" : m.startsWith("comm") || m.startsWith("ouvir") ? "comms" : "auto"; })();
   if (VIEW === "overlay") CONFIG.selecaoAgentes = false;
+  if (VIEW === "comms") CONFIG.selecaoAgentes = false;
   const DEBUG = params.has("debug");
   const CLEAN = params.has("clean");
   let BASE = params.get("assets") || CONFIG.recursos;
@@ -753,6 +755,7 @@ img { display: block; }
   const $ = (id) => document.getElementById(id);
   const stage = $("stage");
   if (VIEW === "agentes") stage.classList.add("only-asel");
+  if (VIEW === "comms") stage.classList.add("only-li");
   const fit = () => {
     const w = innerWidth, h = innerHeight, s = Math.min(w / 1920, h / 1080);
     stage.style.setProperty("--s", String(s));
@@ -1087,6 +1090,7 @@ img { display: block; }
     const pc = (d.tools && d.tools.playercamsInfo) || {};
     const force = String(window.HUD_OUVIR ?? params.get("ouvir") ?? "").toLowerCase();
     let want = force === "l" || force === "left" ? "left" : force === "r" || force === "right" ? "right" : pc.listenIn || false;
+    if (VIEW === "comms" && !want) want = "left"; // fonte só da comunicação: liga/desliga mostrando ou escondendo a fonte no OBS
     if (CONFIG.listenIn === false) want = false;
     const el = $("li");
     if (!want) {
@@ -1101,6 +1105,9 @@ img { display: block; }
     // sem a lista de jogadores do jogo (roster do Overwolf fora do ar): &jogadores=Nick#TAG,Nick2#TAG2… no link
     const manual = (params.get("jogadores") || "").split(",").map((s) => s.trim()).filter(Boolean);
     if (!ps.length && manual.length) ps = manual.slice(0, 5).map((full) => ({ fullName: full, name: full.split("#")[0] }));
+    // sem lista do jogo e sem &jogadores: usa quem está com câmera conectada na sessão do Spectra
+    const cams = (pc.enabledPlayers || []).filter(Boolean);
+    if (!ps.length && cams.length) ps = cams.slice(0, 5).map((full) => ({ fullName: full, name: full.split("#")[0] }));
     const key = want + "|" + room + "|" + ps.map((p) => p.fullName || p.name).join();
     el.classList.toggle("t-l", sideOf(ti) === "l"); el.classList.toggle("t-r", sideOf(ti) === "r");
     setSrc($("li-logo"), T.teamUrl || A(`Logos/logo${ti + 1}.png`));
