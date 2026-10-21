@@ -18,17 +18,15 @@ Cada tela é uma fonte de navegador de **1920 × 1080** no OBS.
 | Resumo dos jogadores (pós-mapa) | `/team-breakdown/` | `?groupCode=CODIGO` |
 | Resumo do mapa (pós-mapa) | `/map-breakdown/` | `?groupCode=CODIGO` |
 | Overlay + seleção de agentes juntos | `/autoswitch/` | `?groupCode=CODIGO` |
-| Comunicação ao vivo (voz + câmera) | `/comms/` | `?groupCode=CODIGO` |
-| Página do jogador (câmera + microfone) | `/jogador/` | `?sala=SALA&id=Nick%23TAG` |
+| Comunicação ao vivo (listen-in) | `/listen-in/` | `?groupCode=CODIGO&team=left` ou `right` |
 
 - `CODIGO` é o código da partida que você digita no Spectra Client. `SESSAO` é o código da sessão da ferramenta de veto do Spectra.
 - **Overlay in-game:** placar, cartões dos jogadores, compra, histórico de rodadas, round win (ace, clutch, flawless, econômico), pausa tática e técnica, destaque de 1x1, jogador observado em dourado e comunicação ao vivo (listen-in).
 - **Seleção de agentes:** aparece sozinha durante a seleção e some quando o jogo começa. Conecte o Spectra Client antes da seleção.
-- **Comunicação ao vivo:** mostra as câmeras e o áudio dos jogadores conectados na sessão de câmeras do Spectra (Playercams). Use como fonte separada no OBS e ligue/desligue mostrando ou escondendo a fonte. `&jogadores=Nick%23TAG,…` escolhe quem aparece.
-- **Página do jogador:** a página de câmera do Spectra transmite **sem microfone**, então a comunicação ao vivo fica sem som. Para ter voz, cada jogador abre `/jogador/?sala=SALA&id=Nick%23TAG` (em vez do link de câmera do Spectra) e escolhe a câmera e o microfone. `SALA` é o código da sessão de câmeras (`playercams.valospectra.com/session/org/SALA/…`). A câmera continua aparecendo no painel do Spectra normalmente.
+- **Comunicação ao vivo (listen-in):** mesmo funcionamento do front do nobii. Mostra a câmera dos 5 jogadores do time escolhido com quem está falando aceso. O time vem do Spectra ou de `&team=left` / `&team=right` no link. Usa a sessão de câmeras dos jogadores do Spectra (Playercams); o áudio depende de a transmissão dos jogadores ter microfone.
 - **Resumos pós-mapa:** usam as estatísticas do Spectra, que chegam depois que o mapa termina. O fundo é transparente, para você colocar a sua imagem atrás no OBS.
 
-Opções que valem em qualquer link: `&demo` (prévia com dados inventados), `&debug` (mostra o que o Spectra está mandando), `&ouvir=l` ou `&ouvir=r` (força a comunicação ao vivo de um time), `&jogadores=Nick#TAG,Nick2#TAG2…` (jogadores da comunicação ao vivo quando o Spectra não manda a lista; use `%23` no lugar do `#` no link) e `&saida=N` (no veto, segundos até sair depois de terminar; `0` = não sai).
+Opções que valem em qualquer link: `&demo` (prévia com dados inventados), `&debug` (mostra o que o Spectra está mandando), `&team=left` ou `&team=right` (força a comunicação ao vivo de um time) e `&saida=N` (no veto, segundos até sair depois de terminar; `0` = não sai).
 
 ## Usar sem instalar
 
@@ -94,7 +92,6 @@ Também dá para hospedar como site estático (GitHub Pages, Netlify) ou abrir o
 | `fase` | Texto do canto superior direito (vazio usa o nome do torneio do Spectra) |
 | `camera` | Moldura da câmera do jogador observado |
 | `listenIn` | Comunicação ao vivo (liga e desliga pelo Spectra Client) |
-| `sala` | Código da sessão de câmeras do Spectra (o que aparece em `playercams.valospectra.com/session/org/CODIGO/…`). Só precisa se o Spectra não mandar sozinho; também vale `&sala=` no link |
 | `destaque1x1`, `quadroVitoria`, `corPorLado` | Destaque de 1x1, quadro de round win e cor por lado (defesa / ataque) |
 | `cores` | Qualquer cor da HUD: `def-*` é a defesa, `att-*` o ataque e `brand-*` a marca |
 

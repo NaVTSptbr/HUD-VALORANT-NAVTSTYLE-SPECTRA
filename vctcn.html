@@ -576,7 +576,6 @@ img { display: block; }
     if (Array.isArray(C.patrocinadores)) CONFIG.patrocinadores = C.patrocinadores.filter(Boolean);
     if (C.logo) CONFIG.logo = C.logo;
     if (C.modo) CONFIG.modo = C.modo;
-    if (C.sala) CONFIG.sala = C.sala;
   }
   // no vídeo as armas do time da esquerda apontam para a direita (para o centro) e as do time da direita para a esquerda
   const FLIP_SIDE = CONFIG.armasParaDireita ? "r" : "l";
@@ -1067,7 +1066,7 @@ img { display: block; }
   // (playercamsInfo.listenIn = "left" | "right"); ?ouvir=l|r força pelo link.
   const SPEAK_LIMIT = 10, SPEAK_HOLD = 400;
   // sala das câmeras: vem do Spectra (sessão de câmeras ativa no Client) ou do link (&sala=CODIGO da sessão)
-  const camRoom = (d) => ((d.tools && d.tools.playercamsInfo && d.tools.playercamsInfo.identifier) || params.get("sala") || CONFIG.sala || "").trim();
+  const camRoom = (d) => ((d.tools && d.tools.playercamsInfo && d.tools.playercamsInfo.identifier) || "").trim();
   const PLAY_SVG = '<svg viewBox="0 0 16 16"><path d="M3 2l11 6-11 6z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg>';
   const LI = { side: null, room: "", tiles: [], timer: null, outT: null };
   const liUrl = (room, full) => { const [n, t] = String(full || "").split("#"); return `https://vdo.ninja/?room=${encodeURIComponent(room)}&view=${encodeURIComponent((n || "").replaceAll(" ", "_") + "_H_" + (t || ""))}&scene=0&cleanoutput&vb=5000&transparent&waitmessage=&disablehotkeys&codec=h265,av1,h264,vp8&getloudness`; };
@@ -1083,14 +1082,13 @@ img { display: block; }
   function liReveal() {
     const el = $("li");
     if (!LI.side || el.classList.contains("on")) return;
-    // como no nobii: espera os 5 conectarem; se algum demorar, mostra mesmo assim depois de 5 s
-    if (LI.tiles.every((k) => k.ok) || Date.now() - LI.at > 5000) { el.classList.remove("out"); void el.offsetWidth; el.classList.add("on"); }
+    // como no nobii: só aparece depois que as câmeras de todos os jogadores do time conectaram
+    if (LI.tiles.length && LI.tiles.every((k) => k.ok)) { el.classList.remove("out"); void el.offsetWidth; el.classList.add("on"); }
   }
   function renderListen(d) {
     const pc = (d.tools && d.tools.playercamsInfo) || {};
-    const force = String(window.HUD_OUVIR ?? params.get("ouvir") ?? "").toLowerCase();
+    const force = String(window.HUD_OUVIR ?? params.get("team") ?? params.get("ouvir") ?? "").toLowerCase();
     let want = force === "l" || force === "left" ? "left" : force === "r" || force === "right" ? "right" : pc.listenIn || false;
-    if (VIEW === "comms" && !want) want = "left"; // fonte só da comunicação: liga/desliga mostrando ou escondendo a fonte no OBS
     if (CONFIG.listenIn === false) want = false;
     const el = $("li");
     if (!want) {
@@ -1101,13 +1099,7 @@ img { display: block; }
       return;
     }
     const ti = want === "left" ? 0 : 1, T = d.teams[ti] || {}, room = camRoom(d);
-    let ps = (T.players || []).slice(0, 5);
-    // sem a lista de jogadores do jogo (roster do Overwolf fora do ar): &jogadores=Nick#TAG,Nick2#TAG2… no link
-    const manual = (params.get("jogadores") || "").split(",").map((s) => s.trim()).filter(Boolean);
-    if (!ps.length && manual.length) ps = manual.slice(0, 5).map((full) => ({ fullName: full, name: full.split("#")[0] }));
-    // sem lista do jogo e sem &jogadores: usa quem está com câmera conectada na sessão do Spectra
-    const cams = (pc.enabledPlayers || []).filter(Boolean);
-    if (!ps.length && cams.length) ps = cams.slice(0, 5).map((full) => ({ fullName: full, name: full.split("#")[0] }));
+    const ps = (T.players || []).slice(0, 5);
     const key = want + "|" + room + "|" + ps.map((p) => p.fullName || p.name).join();
     el.classList.toggle("t-l", sideOf(ti) === "l"); el.classList.toggle("t-r", sideOf(ti) === "r");
     setSrc($("li-logo"), T.teamUrl || A(`Logos/logo${ti + 1}.png`));
