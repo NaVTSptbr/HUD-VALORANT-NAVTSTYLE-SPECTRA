@@ -4,7 +4,7 @@ window.HUD_CONFIG = {
   codigo: "",                         // código da partida (também pode ir no link: ?groupCode=CODIGO)
   recursos: "Resources/",             // pasta das imagens e fontes, ao lado deste arquivo
   fase: "",                           // texto do canto superior direito (vazio usa o nome do torneio do Spectra)
-  camera: false,                      // moldura da câmera do jogador observado (true = liga)
+  camera: true,                       // moldura da câmera do jogador observado (sai sozinha durante a comunicação ao vivo)
   listenIn: true,                     // comunicação ao vivo (liga/desliga pelo Spectra Client)
   corPorLado: true,                   // a cor segue o lado (defesa / ataque)
   armasParaDireita: false,            // as imagens de Resources/Armas apontam para a esquerda

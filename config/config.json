@@ -8,7 +8,7 @@
   "patrocinadores": [],
   "trocaPatrocinio": 6,
   "fase": "",
-  "camera": false,
+  "camera": true,
   "listenIn": true,
   "destaque1x1": true,
   "quadroVitoria": true,
