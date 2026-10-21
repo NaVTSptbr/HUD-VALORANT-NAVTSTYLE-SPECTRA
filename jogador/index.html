@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Câmera e microfone do jogador</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: #0f1520; color: #e8edf1; font: 16px/1.45 "Segoe UI", system-ui, sans-serif; }
+  main { width: min(520px, calc(100% - 32px)); margin: 48px auto; background: #161e2b; border: 1px solid #263244; border-radius: 10px; padding: 28px; }
+  h1 { margin: 0 0 6px; font-size: 22px; }
+  p { margin: 0 0 16px; color: #9fb0c0; font-size: 14px; }
+  label { display: block; font-size: 13px; color: #9fb0c0; margin: 14px 0 6px; }
+  input { width: 100%; padding: 11px 12px; border-radius: 6px; border: 1px solid #2f3d52; background: #0f1520; color: #fff; font-size: 17px; }
+  button { margin-top: 20px; width: 100%; padding: 12px; border: 0; border-radius: 6px; background: #6238d6; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .err { color: #ff8b7a; font-size: 13px; min-height: 18px; margin-top: 8px; }
+  iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
+</style>
+</head>
+<body>
+<main id="form">
+  <h1>Câmera e microfone</h1>
+  <p>Abra durante a partida e deixe esta aba aberta. A transmissão usa a sua câmera e o seu microfone (o mesmo que você usa para falar com o time).</p>
+  <label for="sala">Código da sala das câmeras</label>
+  <input id="sala" autocomplete="off" placeholder="ex.: SPPCBEIQRN">
+  <label for="rid">Seu Riot ID (exatamente como no jogo)</label>
+  <input id="rid" autocomplete="off" placeholder="Nick#TAG">
+  <div class="err" id="err"></div>
+  <button id="go" type="button">Começar a transmitir</button>
+</main>
+<script>
+  // Mesmo nome de transmissão que o Spectra usa (Nick_H_TAG), mas COM microfone — a página de câmera do Spectra transmite sem áudio.
+  const P = new URLSearchParams(location.search);
+  const sala = document.getElementById("sala"), rid = document.getElementById("rid"), err = document.getElementById("err");
+  sala.value = P.get("sala") || ""; rid.value = P.get("id") || P.get("jogador") || "";
+  function start() {
+    const s = sala.value.trim(), r = rid.value.trim();
+    if (!s) { err.textContent = "Coloque o código da sala."; return; }
+    if (!/^.+#.+$/.test(r)) { err.textContent = "O Riot ID precisa ter o # e a tag (Nick#TAG)."; return; }
+    const [n, t] = r.split("#");
+    const push = n.replaceAll(" ", "_") + "_H_" + t;
+    const url = `https://vdo.ninja/?room=${encodeURIComponent(s)}&push=${encodeURIComponent(push)}&view&webcam&height=720&width=1280&mfps=30&maxbitrate=5000&roombitrate=0&mirror&label=${encodeURIComponent(r)}`;
+    const f = document.createElement("iframe"); f.allow = "camera;microphone;fullscreen;autoplay;display-capture"; f.src = url;
+    document.getElementById("form").remove(); document.body.appendChild(f);
+  }
+  document.getElementById("go").onclick = start;
+  if (P.get("sala") && (P.get("id") || P.get("jogador")) && P.has("auto")) start();
+</script>
+</body>
+</html>

@@ -28,21 +28,23 @@
   <p>Preencha os códigos e copie os links para fontes de navegador 1920×1080 no OBS.</p>
   <label for="c">Código da partida (Spectra Client)</label>
   <input id="c" autocomplete="off" placeholder="ABC123">
+  <label for="cam">Código da sala das câmeras (opcional, para a página dos jogadores)</label>
+  <input id="cam" autocomplete="off" placeholder="ex.: SPPCBEIQRN">
   <label for="s">Código da sessão de veto (opcional)</label>
   <input id="s" autocomplete="off" placeholder="sessão do veto">
   <ul id="l"></ul>
 </main>
 <script>
-  const c = document.getElementById("c"), s = document.getElementById("s"), l = document.getElementById("l");
+  const c = document.getElementById("c"), s = document.getElementById("s"), cam = document.getElementById("cam"), l = document.getElementById("l");
   const base = location.origin + location.pathname.replace(/index\.html$/, "");
   const draw = () => {
     const code = encodeURIComponent(c.value.trim().toUpperCase() || "CODIGO"), ses = encodeURIComponent(s.value.trim() || "SESSAO");
     const links = [["Overlay in-game", `overlay/?groupCode=${code}`], ["Seleção de agentes", `agent-select/?groupCode=${code}`],
       ["Veto de mapas", `mapban/?sessionId=${ses}`], ["Resumo dos jogadores (pós-mapa)", `team-breakdown/?groupCode=${code}`],
-      ["Resumo do mapa (pós-mapa)", `map-breakdown/?groupCode=${code}`], ["Comunicação ao vivo (voz + câmera)", `comms/?groupCode=${code}`], ["Overlay + seleção de agentes na mesma fonte (autoswitch)", `autoswitch/?groupCode=${code}`]];
+      ["Resumo do mapa (pós-mapa)", `map-breakdown/?groupCode=${code}`], ["Comunicação ao vivo (voz + câmera)", `comms/?groupCode=${code}`], ["Overlay + seleção de agentes na mesma fonte (autoswitch)", `autoswitch/?groupCode=${code}`], ["Link para os jogadores (câmera + microfone; cada um coloca o próprio Riot ID)", `jogador/?sala=${encodeURIComponent(cam.value.trim() || "SALA")}`]];
     l.innerHTML = links.map(([t, u]) => `<li><b>${t}</b><a href="${base + u}" target="_blank">${base + u}</a></li>`).join("");
   };
-  c.addEventListener("input", draw); s.addEventListener("input", draw); draw(); c.focus();
+  c.addEventListener("input", draw); s.addEventListener("input", draw); cam.addEventListener("input", draw); draw(); c.focus();
 </script>
 </body>
 </html>

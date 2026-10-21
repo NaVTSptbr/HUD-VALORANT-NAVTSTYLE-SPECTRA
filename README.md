@@ -19,11 +19,13 @@ Cada tela é uma fonte de navegador de **1920 × 1080** no OBS.
 | Resumo do mapa (pós-mapa) | `/map-breakdown/` | `?groupCode=CODIGO` |
 | Overlay + seleção de agentes juntos | `/autoswitch/` | `?groupCode=CODIGO` |
 | Comunicação ao vivo (voz + câmera) | `/comms/` | `?groupCode=CODIGO` |
+| Página do jogador (câmera + microfone) | `/jogador/` | `?sala=SALA&id=Nick%23TAG` |
 
 - `CODIGO` é o código da partida que você digita no Spectra Client. `SESSAO` é o código da sessão da ferramenta de veto do Spectra.
 - **Overlay in-game:** placar, cartões dos jogadores, compra, histórico de rodadas, round win (ace, clutch, flawless, econômico), pausa tática e técnica, destaque de 1x1, jogador observado em dourado e comunicação ao vivo (listen-in).
 - **Seleção de agentes:** aparece sozinha durante a seleção e some quando o jogo começa. Conecte o Spectra Client antes da seleção.
 - **Comunicação ao vivo:** mostra as câmeras e o áudio dos jogadores conectados na sessão de câmeras do Spectra (Playercams). Use como fonte separada no OBS e ligue/desligue mostrando ou escondendo a fonte. `&jogadores=Nick%23TAG,…` escolhe quem aparece.
+- **Página do jogador:** a página de câmera do Spectra transmite **sem microfone**, então a comunicação ao vivo fica sem som. Para ter voz, cada jogador abre `/jogador/?sala=SALA&id=Nick%23TAG` (em vez do link de câmera do Spectra) e escolhe a câmera e o microfone. `SALA` é o código da sessão de câmeras (`playercams.valospectra.com/session/org/SALA/…`). A câmera continua aparecendo no painel do Spectra normalmente.
 - **Resumos pós-mapa:** usam as estatísticas do Spectra, que chegam depois que o mapa termina. O fundo é transparente, para você colocar a sua imagem atrás no OBS.
 
 Opções que valem em qualquer link: `&demo` (prévia com dados inventados), `&debug` (mostra o que o Spectra está mandando), `&ouvir=l` ou `&ouvir=r` (força a comunicação ao vivo de um time), `&jogadores=Nick#TAG,Nick2#TAG2…` (jogadores da comunicação ao vivo quando o Spectra não manda a lista; use `%23` no lugar do `#` no link) e `&saida=N` (no veto, segundos até sair depois de terminar; `0` = não sai).
