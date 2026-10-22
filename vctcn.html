@@ -102,7 +102,9 @@ img { display: block; }
 .bug .sc.r { left: 1082px; }
 .bug .sc.bump { animation: bump 420ms ease-out; }
 @keyframes bump { 0% { transform: scale(1.18); } 100% { transform: scale(1); } }
-.bug .rnd { position: absolute; left: 900px; width: 120px; top: 5px; text-align: center; font: 700 12px/1 var(--f-num); color: var(--mute); letter-spacing: 0.5px; }
+.bug .rnd { position: absolute; left: 900px; width: 120px; top: 78px; text-align: center; font: 700 12px/1 var(--f-num); color: var(--mute); letter-spacing: 0.5px; }
+/* o tempo e a spike quem mostra é o próprio Valorant, dentro do buraco do centro */
+.bug .time, .bug .spk { display: none !important; }
 .bug .time { position: absolute; left: 880px; width: 160px; transform-origin: 50% 50%; white-space: nowrap; top: 24px; text-align: center; font: 400 48px/1 var(--f-cond); color: #fff; letter-spacing: 0.5px; transition: opacity var(--t-fast); }
 .bug .spk { position: absolute; left: 932px; top: 21px; width: 56px; height: 48px; opacity: 0; transition: opacity var(--t-mid); }
 .bug .spk i { position: absolute; inset: 0; background: var(--att-hi); -webkit-mask: var(--spike-mask) center / contain no-repeat; mask: var(--spike-mask) center / contain no-repeat; }
@@ -663,7 +665,8 @@ img { display: block; }
         <polygon points="559,0 830,0 864,47 784,47 770,61 607,61" fill="url(#dots)"/>
         <polygon points="1361,0 1090,0 1056,47 1136,47 1150,61 1313,61" style="fill:url(#gr)"/>
         <polygon points="1361,0 1090,0 1056,47 1136,47 1150,61 1313,61" fill="url(#dots)"/>
-        <polygon points="836,0 1084,0 1027,80 893,80" fill="#0f1520" fill-opacity=".97"/>
+        <!-- centro com um buraco no lugar do relógio do próprio Valorant (1920×1080: x 890–1030, y 0–73) -->
+        <path d="M836,0 H1084 L1032,94 H888 Z M890,0 V73 H1030 V0 Z" fill-rule="evenodd" fill="#0f1520" fill-opacity=".97"/>
         <polygon points="827,0 836,0 870,47 861,47" style="fill:var(--l-hi)"/>
         <polygon points="1093,0 1084,0 1050,47 1059,47" style="fill:var(--r-hi)"/>
         <g id="pips-l"></g><g id="pips-r"></g>
