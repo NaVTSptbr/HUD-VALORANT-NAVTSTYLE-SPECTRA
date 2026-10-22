@@ -75,7 +75,9 @@ img { display: block; }
 .hidden { display: none !important; }
 
 /* ---------- Faixa informativa (y 0–34) ---------- */
-.info-band { left: 0; top: 0; width: 1920px; height: 34px; background: linear-gradient(180deg, rgba(0, 0, 0, 0.97), rgba(2, 4, 6, 0.92)); }
+.info-band { left: 0; top: 0; width: 1920px; height: 34px; background: linear-gradient(180deg, rgba(0, 0, 0, 0.97), rgba(2, 4, 6, 0.92));
+  /* vazada no meio: o relógio do Valorant (x 890–1030) aparece inteiro, sem faixa por cima */
+  -webkit-mask: linear-gradient(90deg, #000 890px, transparent 890px, transparent 1030px, #000 1030px); mask: linear-gradient(90deg, #000 890px, transparent 890px, transparent 1030px, #000 1030px); }
 .info { top: 0; height: 34px; display: flex; align-items: center; font: 800 16px/1 var(--f-num); color: var(--ink); white-space: nowrap; letter-spacing: 0.2px; }
 .info.l { left: 10px; gap: 0; }
 .info .it { display: flex; align-items: center; gap: 8px; }
@@ -102,7 +104,7 @@ img { display: block; }
 .bug .sc.r { left: 1082px; }
 .bug .sc.bump { animation: bump 420ms ease-out; }
 @keyframes bump { 0% { transform: scale(1.18); } 100% { transform: scale(1); } }
-.bug .rnd { position: absolute; left: 900px; width: 120px; top: 78px; text-align: center; font: 700 12px/1 var(--f-num); color: var(--mute); letter-spacing: 0.5px; }
+.bug .rnd { display: none; position: absolute; left: 900px; width: 120px; top: 78px; text-align: center; font: 700 12px/1 var(--f-num); color: var(--mute); letter-spacing: 0.5px; }
 /* o tempo e a spike quem mostra é o próprio Valorant, dentro do buraco do centro */
 .bug .time, .bug .spk { display: none !important; }
 .bug .time { position: absolute; left: 880px; width: 160px; transform-origin: 50% 50%; white-space: nowrap; top: 24px; text-align: center; font: 400 48px/1 var(--f-cond); color: #fff; letter-spacing: 0.5px; transition: opacity var(--t-fast); }
@@ -666,7 +668,7 @@ img { display: block; }
         <polygon points="1361,0 1090,0 1056,47 1136,47 1150,61 1313,61" style="fill:url(#gr)"/>
         <polygon points="1361,0 1090,0 1056,47 1136,47 1150,61 1313,61" fill="url(#dots)"/>
         <!-- centro com um buraco no lugar do relógio do próprio Valorant (1920×1080: x 890–1030, y 0–73) -->
-        <path d="M836,0 H1084 L1032,94 H888 Z M890,0 V73 H1030 V0 Z" fill-rule="evenodd" fill="#0f1520" fill-opacity=".97"/>
+        <path d="M836,0 H1084 L1027,80 H893 Z M890,0 V73 H1030 V0 Z" fill-rule="evenodd" fill="#0f1520" fill-opacity=".97"/>
         <polygon points="827,0 836,0 870,47 861,47" style="fill:var(--l-hi)"/>
         <polygon points="1093,0 1084,0 1050,47 1059,47" style="fill:var(--r-hi)"/>
         <g id="pips-l"></g><g id="pips-r"></g>
@@ -950,7 +952,8 @@ img { display: block; }
     if (fut.length > 1) items.push([L10N.next, mapLabel(fut[0].map), logoOf(fut[0])]);
     if (fut.length) items.push([L10N.dec, mapLabel(fut[fut.length - 1].map), ""]);
     setHTML($("info-l"), items.map(([k, v, lg]) => `<span class="it">${esc(k)}: ${esc(v)}${lg ? `<img src="${esc(lg)}" alt="">` : ""}</span>`).join(""));
-    setText($("info-r"), CONFIG.fase || (tools.tournamentInfo && tools.tournamentInfo.name) || "");
+    // a rodada saiu do centro (lá agora aparece o relógio do Valorant) e fica aqui, antes da fase
+    setText($("info-r"), [$("rnd").textContent, CONFIG.fase || (tools.tournamentInfo && tools.tournamentInfo.name) || ""].filter(Boolean).join("  ·  "));
 
     // placar e times
     const need = series.needed >= 1 ? Math.min(4, series.needed) : 0;
