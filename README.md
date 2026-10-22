@@ -111,3 +111,7 @@ A HUD usa **Foundry Gridnik** (Regular, Bold e ExtraBold) e **Tungsten** (Bold),
 # AVISO
 
 Este projeto não é endossado pela Riot Games e não reflete as opiniões da Riot Games ou de qualquer pessoa oficialmente envolvida na produção ou gestão de propriedades da Riot Games. Riot Games e todas as propriedades associadas são marcas registradas da Riot Games, Inc.
+
+### Testar as pausas (timeouts)
+
+Na prévia, sem partida: `overlay/?demo&pausa=esquerda`, `overlay/?demo&pausa=direita` ou `overlay/?demo&pausa=tecnica`. `&pausaSeg=45` muda o tempo restante; `&pausaSeg=0` mostra sem contagem.

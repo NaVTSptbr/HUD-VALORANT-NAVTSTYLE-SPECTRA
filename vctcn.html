@@ -1647,6 +1647,18 @@ img { display: block; }
   startShopping();
   if (params.has("agentes") || (VIEW === "agentes" && !params.get("state"))) startLobby();
   window.__sim = sim;
+  // teste das pausas na prévia: ?demo&pausa=esquerda | direita | tecnica (&pausaSeg=60 = tempo restante; 0 = sem contagem)
+  const PZ = String(params.get("pausa") || "").toLowerCase();
+  if (PZ) {
+    const left = PZ.startsWith("esq") || PZ === "l" || PZ === "left", right = PZ.startsWith("dir") || PZ === "r" || PZ === "right";
+    const seg = params.has("pausaSeg") ? Number(params.get("pausaSeg")) || 0 : 60, t0 = performance.now();
+    const apply = () => {
+      const rem = seg ? Math.max(0, seg - (performance.now() - t0) / 1000) : 0;
+      sim.d.timeoutState = { techPause: !left && !right, leftTeam: left, rightTeam: right, timeRemaining: rem };
+      if (sim.d.tools) sim.d.tools.timeoutDuration = seg || 60;
+    };
+    apply(); setInterval(apply, 200);
+  }
   // ?state=buy|combat|plant|dead congela a prévia num momento (para comparar com a referência)
   const freeze = params.get("state");
   if (freeze) {
